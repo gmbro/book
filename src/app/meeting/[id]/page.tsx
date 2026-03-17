@@ -11,7 +11,14 @@ const Icons = {
   edit: <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>,
   mic: <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" y1="19" x2="12" y2="23"/></svg>,
   star: <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>,
+  search: <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>,
 };
+
+interface BookResult {
+  id: string; title: string; author: string; description: string;
+  thumbnail: string | null; publishedDate: string; publisher: string;
+  rating: number | null; ratingsCount: number; pageCount: number; categories: string[];
+}
 
 export default function MeetingDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
@@ -26,10 +33,15 @@ export default function MeetingDetailPage({ params }: { params: Promise<{ id: st
 
   // 모달
   const [modal, setModal] = useState<string | null>(null);
-  const [bookForm, setBookForm] = useState({ title: '', author: '' });
   const [discForm, setDiscForm] = useState({ type: 'topic' as 'topic' | 'question', content: '' });
   const [recContent, setRecContent] = useState('');
   const [summaryLoading, setSummaryLoading] = useState(false);
+
+  // 도서 검색
+  const [bookQuery, setBookQuery] = useState('');
+  const [bookResults, setBookResults] = useState<BookResult[]>([]);
+  const [bookSearching, setBookSearching] = useState(false);
+  const [selectedBook, setSelectedBook] = useState<BookResult | null>(null);
 
   // 녹음
   const [isRec, setIsRec] = useState(false);
@@ -65,7 +77,6 @@ export default function MeetingDetailPage({ params }: { params: Promise<{ id: st
       }
     } catch { /* fallback to local */ }
     setUseLocal(true);
-    // local
     const sm = localStorage.getItem('meetings');
     if (sm) { const ml = JSON.parse(sm); const f = ml.find((m: Meeting) => m.id === id); if (f) setMeeting(f); }
     const sd = localStorage.getItem(`discussions-${id}`);
@@ -74,20 +85,44 @@ export default function MeetingDetailPage({ params }: { params: Promise<{ id: st
     if (sr) setRecord(JSON.parse(sr));
   };
 
-  const saveBook = async () => {
+  // 도서 검색
+  const searchBooks = async () => {
+    if (!bookQuery.trim()) return;
+    setBookSearching(true);
+    try {
+      const res = await fetch(`/api/books?q=${encodeURIComponent(bookQuery)}`);
+      const data = await res.json();
+      setBookResults(data.items || []);
+    } catch { setBookResults([]); }
+    setBookSearching(false);
+  };
+
+  const selectBook = async (book: BookResult) => {
+    setSelectedBook(book);
     if (!meeting) return;
-    const up = { ...meeting, book_title: bookForm.title, book_author: bookForm.author };
+    const up = { ...meeting, book_title: book.title, book_author: book.author };
     setMeeting(up);
     if (useLocal) {
       const stored = JSON.parse(localStorage.getItem('meetings') || '[]');
       const idx = stored.findIndex((m: Meeting) => m.id === id);
       if (idx >= 0) stored[idx] = up;
       localStorage.setItem('meetings', JSON.stringify(stored));
+      // 표지/설명도 로컬 저장
+      localStorage.setItem(`book-detail-${id}`, JSON.stringify(book));
     } else {
-      await supabase.from('meetings').update({ book_title: bookForm.title, book_author: bookForm.author }).eq('id', id);
+      await supabase.from('meetings').update({ book_title: book.title, book_author: book.author }).eq('id', id);
     }
     setModal(null);
+    setBookQuery(''); setBookResults([]);
   };
+
+  // 로컬 도서 상세 불러오기
+  useEffect(() => {
+    if (meeting?.book_title && !selectedBook) {
+      const stored = localStorage.getItem(`book-detail-${id}`);
+      if (stored) setSelectedBook(JSON.parse(stored));
+    }
+  }, [meeting, id, selectedBook]);
 
   const addDiscussion = async () => {
     if (!currentUser || !discForm.content) return;
@@ -177,7 +212,7 @@ export default function MeetingDetailPage({ params }: { params: Promise<{ id: st
           </span>
         </div>
 
-        {/* 기본 정보 카드 */}
+        {/* 기본 정보 */}
         <div className="section">
           <div style={{fontSize:'12px',color:'var(--text-muted)',marginBottom:'3px'}}>일시</div>
           <div style={{fontSize:'14px',fontWeight:600}}>
@@ -192,25 +227,41 @@ export default function MeetingDetailPage({ params }: { params: Promise<{ id: st
           <button className={`tab ${activeTab === 'rec' ? 'on' : ''}`} onClick={() => setActiveTab('rec')}>기록</button>
         </div>
 
-        {/* 도서 탭 */}
+        {/* ===== 도서 탭 ===== */}
         {activeTab === 'book' && (
           <div className="section">
             <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:'10px'}}>
               <div className="section-title" style={{marginBottom:0}}>{Icons.book} 선정 도서</div>
-              <button className="btn btn-sm btn-outline" onClick={() => { setBookForm({ title: meeting.book_title || '', author: meeting.book_author || '' }); setModal('book'); }}>
-                {meeting.book_title ? '수정' : '선정하기'}
+              <button className="btn btn-sm btn-outline" onClick={() => { setBookQuery(meeting.book_title || ''); setBookResults([]); setModal('book'); }}>
+                {Icons.search} {meeting.book_title ? '변경' : '검색'}
               </button>
             </div>
             {meeting.book_title ? (
-              <div className="book-box">
-                <div style={{fontSize:'14px',marginBottom:'2px'}}>{meeting.book_title}</div>
-                <div style={{fontSize:'12px',color:'var(--text-muted)'}}>{meeting.book_author || '저자 미상'}</div>
+              <div style={{display:'flex',gap:'12px',padding:'12px',background:'var(--bg-input)',borderRadius:'var(--r)',border:'1px solid var(--border)'}}>
+                {selectedBook?.thumbnail && (
+                  <img src={selectedBook.thumbnail} alt="" style={{width:'60px',height:'85px',objectFit:'cover',borderRadius:'6px',flexShrink:0,boxShadow:'0 2px 6px rgba(0,0,0,0.15)'}} />
+                )}
+                <div style={{flex:1,minWidth:0}}>
+                  <div style={{fontSize:'14px',fontWeight:600,marginBottom:'2px'}}>{meeting.book_title}</div>
+                  <div style={{fontSize:'12px',color:'var(--text-muted)',marginBottom:'4px'}}>{meeting.book_author || '저자 미상'}</div>
+                  {selectedBook?.publisher && <div style={{fontSize:'11px',color:'var(--text-muted)'}}>출판: {selectedBook.publisher} {selectedBook.publishedDate ? `(${selectedBook.publishedDate.slice(0,4)})` : ''}</div>}
+                  {selectedBook?.rating && (
+                    <div style={{fontSize:'11px',color:'var(--accent)',marginTop:'2px'}}>
+                      {'★'.repeat(Math.round(selectedBook.rating))}{'☆'.repeat(5-Math.round(selectedBook.rating))} {selectedBook.rating.toFixed(1)} ({selectedBook.ratingsCount}명)
+                    </div>
+                  )}
+                  {selectedBook?.description && (
+                    <div style={{fontSize:'11px',color:'var(--text-sub)',marginTop:'6px',lineHeight:'1.5',display:'-webkit-box',WebkitLineClamp:3,WebkitBoxOrient:'vertical',overflow:'hidden'}}>
+                      {selectedBook.description}
+                    </div>
+                  )}
+                </div>
               </div>
             ) : <div className="empty">아직 도서가 선정되지 않았습니다</div>}
           </div>
         )}
 
-        {/* 발제문 탭 */}
+        {/* ===== 발제문 탭 ===== */}
         {activeTab === 'disc' && (
           <div className="section">
             <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:'10px'}}>
@@ -227,7 +278,7 @@ export default function MeetingDetailPage({ params }: { params: Promise<{ id: st
           </div>
         )}
 
-        {/* 기록 탭 */}
+        {/* ===== 기록 탭 ===== */}
         {activeTab === 'rec' && (
           <div className="section">
             <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:'10px'}}>
@@ -269,13 +320,39 @@ export default function MeetingDetailPage({ params }: { params: Promise<{ id: st
         )}
       </div>
 
-      {/* 도서 모달 */}
+      {/* ===== 도서 검색 모달 ===== */}
       {modal === 'book' && (
-        <div className="overlay" onClick={() => setModal(null)}><div className="modal" onClick={e => e.stopPropagation()}>
-          <h2>도서 선정</h2>
-          <div className="form-group"><label className="form-label">도서 제목</label><input className="input" value={bookForm.title} onChange={e => setBookForm({...bookForm, title: e.target.value})} /></div>
-          <div className="form-group"><label className="form-label">저자</label><input className="input" value={bookForm.author} onChange={e => setBookForm({...bookForm, author: e.target.value})} /></div>
-          <div className="modal-btns"><button className="btn btn-outline" style={{flex:1}} onClick={() => setModal(null)}>취소</button><button className="btn btn-accent" style={{flex:1}} onClick={saveBook}>저장</button></div>
+        <div className="overlay" onClick={() => setModal(null)}><div className="modal" onClick={e => e.stopPropagation()} style={{maxHeight:'80vh',overflow:'auto'}}>
+          <h2>{Icons.search} 도서 검색</h2>
+          <div style={{display:'flex',gap:'6px',marginBottom:'12px'}}>
+            <input className="input" style={{flex:1}} placeholder="도서명, 저자 검색..." value={bookQuery} onChange={e => setBookQuery(e.target.value)} onKeyDown={e => e.key === 'Enter' && searchBooks()} />
+            <button className="btn btn-accent" onClick={searchBooks} disabled={bookSearching}>{bookSearching ? '...' : '검색'}</button>
+          </div>
+          {bookSearching && <div style={{textAlign:'center',padding:'20px',color:'var(--text-muted)',fontSize:'13px'}}>검색 중...</div>}
+          {bookResults.length > 0 && (
+            <div style={{display:'flex',flexDirection:'column',gap:'8px'}}>
+              {bookResults.map(b => (
+                <div key={b.id} onClick={() => selectBook(b)} style={{display:'flex',gap:'10px',padding:'10px',borderRadius:'var(--r-sm)',border:'1px solid var(--border)',cursor:'pointer',transition:'background 0.15s'}} onMouseOver={e => (e.currentTarget.style.background = 'var(--bg-input)')} onMouseOut={e => (e.currentTarget.style.background = 'transparent')}>
+                  {b.thumbnail ? (
+                    <img src={b.thumbnail} alt="" style={{width:'45px',height:'64px',objectFit:'cover',borderRadius:'4px',flexShrink:0}} />
+                  ) : (
+                    <div style={{width:'45px',height:'64px',borderRadius:'4px',background:'var(--bg-input)',display:'flex',alignItems:'center',justifyContent:'center',fontSize:'10px',color:'var(--text-muted)',flexShrink:0}}>표지없음</div>
+                  )}
+                  <div style={{flex:1,minWidth:0}}>
+                    <div style={{fontSize:'13px',fontWeight:600,marginBottom:'2px',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{b.title}</div>
+                    <div style={{fontSize:'11px',color:'var(--text-muted)'}}>{b.author}</div>
+                    {b.publisher && <div style={{fontSize:'10px',color:'var(--text-muted)',marginTop:'1px'}}>{b.publisher} {b.publishedDate ? `(${b.publishedDate.slice(0,4)})` : ''}</div>}
+                    {b.rating && <div style={{fontSize:'10px',color:'var(--accent)',marginTop:'1px'}}>★ {b.rating.toFixed(1)}</div>}
+                    {b.description && <div style={{fontSize:'10px',color:'var(--text-sub)',marginTop:'3px',lineHeight:'1.4',display:'-webkit-box',WebkitLineClamp:2,WebkitBoxOrient:'vertical',overflow:'hidden'}}>{b.description}</div>}
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+          {!bookSearching && bookResults.length === 0 && bookQuery && (
+            <div style={{textAlign:'center',padding:'16px',color:'var(--text-muted)',fontSize:'12px'}}>검색어를 입력하고 검색 버튼을 눌러주세요</div>
+          )}
+          <div className="modal-btns" style={{marginTop:'12px'}}><button className="btn btn-outline btn-full" onClick={() => setModal(null)}>닫기</button></div>
         </div></div>
       )}
       {/* 발제문 모달 */}
@@ -287,7 +364,7 @@ export default function MeetingDetailPage({ params }: { params: Promise<{ id: st
               <option value="topic">발제문</option><option value="question">질문</option>
             </select>
           </div>
-          <div className="form-group"><label className="form-label">내용</label><textarea className="input" value={discForm.content} onChange={e => setDiscForm({...discForm, content: e.target.value})} /></div>
+          <div className="form-group"><label className="form-label">내용</label><textarea className="input" placeholder="내용을 입력해주세요" value={discForm.content} onChange={e => setDiscForm({...discForm, content: e.target.value})} /></div>
           <div className="modal-btns"><button className="btn btn-outline" style={{flex:1}} onClick={() => setModal(null)}>취소</button><button className="btn btn-accent" style={{flex:1}} onClick={addDiscussion}>추가</button></div>
         </div></div>
       )}
@@ -295,7 +372,7 @@ export default function MeetingDetailPage({ params }: { params: Promise<{ id: st
       {modal === 'rec' && (
         <div className="overlay" onClick={() => setModal(null)}><div className="modal" onClick={e => e.stopPropagation()}>
           <h2>모임 기록</h2>
-          <div className="form-group"><label className="form-label">기록 내용</label><textarea className="input" style={{minHeight:'160px'}} value={recContent} onChange={e => setRecContent(e.target.value)} /></div>
+          <div className="form-group"><label className="form-label">기록 내용</label><textarea className="input" style={{minHeight:'160px'}} placeholder="모임 내용을 기록해주세요" value={recContent} onChange={e => setRecContent(e.target.value)} /></div>
           <div className="modal-btns"><button className="btn btn-outline" style={{flex:1}} onClick={() => setModal(null)}>취소</button><button className="btn btn-accent" style={{flex:1}} onClick={saveRecord}>저장</button></div>
         </div></div>
       )}
