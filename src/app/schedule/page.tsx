@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
-import { supabase, Member, ScheduleProposal, ScheduleVote, Meeting, Poll, PollVote } from '@/lib/supabase';
+import { supabase, Member, ScheduleProposal, ScheduleVote, Meeting, Poll, PollVote, PollComment } from '@/lib/supabase';
 import Calendar from '@/components/Calendar';
 
 /* ===== SVG 픽토그램 ===== */
@@ -24,7 +24,7 @@ const Icons = {
 };
 
 interface ProposalWithVotes extends ScheduleProposal { votes: ScheduleVote[]; proposerName: string; deadline?: string; }
-interface PollWithVotes extends Poll { votes: PollVote[]; creatorName: string; }
+interface PollWithVotes extends Poll { votes: PollVote[]; creatorName: string; comments: PollComment[]; }
 
 const MEMBERS_DEFAULT: Member[] = [
   { id: 'local-0', name: '오영준', role: 'leader', created_at: '' },
@@ -93,6 +93,7 @@ export default function SchedulePage() {
   const [proposals, setProposals] = useState<ProposalWithVotes[]>([]);
   const [meetings, setMeetings] = useState<Meeting[]>([]);
   const [polls, setPolls] = useState<PollWithVotes[]>([]);
+  const [commentInput, setCommentInput] = useState<Record<string,string>>({});
   const [useLocal, setUseLocal] = useState(false);
 
 
@@ -164,8 +165,9 @@ export default function SchedulePage() {
         const pollsWithVotes: PollWithVotes[] = [];
         for (const p of pollData) {
           const { data: vd } = await supabase.from('poll_votes').select('*').eq('poll_id', p.id);
+          const { data: cd } = await supabase.from('poll_comments').select('*').eq('poll_id', p.id).order('created_at');
           const creator = mems.find(m => m.id === p.created_by);
-          pollsWithVotes.push({ ...p, votes: vd || [], creatorName: creator?.name || '?' });
+          pollsWithVotes.push({ ...p, votes: vd || [], comments: cd || [], creatorName: creator?.name || '?' });
         }
         setPolls(pollsWithVotes);
       }
@@ -366,9 +368,10 @@ export default function SchedulePage() {
     // title = location + first date summary
     const title = form.pollLocation?.trim() || '장소 미정';
     const desc = form.pollDesc.trim();
-    // deadline = last schedule date + 23:59
+    // deadline = explicit or last schedule date + 23:59
     const lastDate = schedules[schedules.length - 1].date;
-    const deadline = new Date(lastDate + 'T23:59:59').toISOString();
+    const deadlineDate = form.pollDeadline || lastDate;
+    const deadline = new Date(deadlineDate + 'T23:59:59').toISOString();
     // full description with schedules
     const scheduleText = schedules.map(s => `${s.date} ${s.time}`).join('\n');
     const fullDesc = `${desc}\n\n📅 일정:\n${scheduleText}`;
@@ -376,7 +379,7 @@ export default function SchedulePage() {
       const newPoll: PollWithVotes = {
         id: `poll-${Date.now()}`, title, description: fullDesc,
         created_by: user.id, deadline, created_at: new Date().toISOString(),
-        votes: [], creatorName: user.name,
+        votes: [], comments: [], creatorName: user.name,
       };
       const up = [newPoll, ...polls]; setPolls(up); savePolls(up);
     } else {
@@ -397,7 +400,8 @@ export default function SchedulePage() {
     const title = form.pollLocation?.trim() || '장소 미정';
     const desc = form.pollDesc.trim();
     const lastDate = schedules[schedules.length - 1].date;
-    const deadline = new Date(lastDate + 'T23:59:59').toISOString();
+    const deadlineDate = form.pollDeadline || lastDate;
+    const deadline = new Date(deadlineDate + 'T23:59:59').toISOString();
     const scheduleText = schedules.map(s => `${s.date} ${s.time}`).join('\n');
     const fullDesc = `${desc}\n\n📅 일정:\n${scheduleText}`;
     if (useLocal) {
@@ -448,6 +452,48 @@ export default function SchedulePage() {
       }
       await loadPolls();
     }
+  };
+
+  // ===== 댓글 =====
+  const handleAddComment = async (pollId: string) => {
+    const text = commentInput[pollId]?.trim();
+    if (!user || !text) return;
+    if (useLocal) {
+      const up = polls.map(p => {
+        if (p.id !== pollId) return p;
+        const nc: PollComment = { id: `pc-${Date.now()}`, poll_id: pollId, member_id: user.id, content: text, created_at: new Date().toISOString() };
+        return { ...p, comments: [...p.comments, nc] };
+      });
+      setPolls(up); savePolls(up);
+    } else {
+      await supabase.from('poll_comments').insert({ poll_id: pollId, member_id: user.id, content: text });
+      await loadPolls();
+    }
+    setCommentInput(prev => ({ ...prev, [pollId]: '' }));
+  };
+
+  const handleDeleteComment = async (commentId: string, pollId: string) => {
+    if (useLocal) {
+      const up = polls.map(p => p.id === pollId ? { ...p, comments: p.comments.filter(c => c.id !== commentId) } : p);
+      setPolls(up); savePolls(up);
+    } else {
+      await supabase.from('poll_comments').delete().eq('id', commentId);
+      await loadPolls();
+    }
+  };
+
+  // ===== 모임 수정 =====
+  const handleEditMeeting = async () => {
+    if (!form.editMeetingId) return;
+    if (useLocal) {
+      const up = meetings.map(m => m.id === form.editMeetingId ? { ...m, date: form.date || m.date, time: form.time || m.time, book_title: form.bookTitle || m.book_title } : m);
+      setMeetings(up); saveMeetings(up);
+    } else {
+      await supabase.from('meetings').update({ date: form.date, time: form.time, book_title: form.bookTitle }).eq('id', form.editMeetingId);
+      const { data: mtgs } = await supabase.from('meetings').select('*').order('date');
+      if (mtgs) setMeetings(mtgs);
+    }
+    setForm({}); setModal(null);
   };
 
   /* ===== 메인 원페이지 ===== */
@@ -542,10 +588,10 @@ export default function SchedulePage() {
 
         </div>
 
-        {/* 모임 기록 리스트 (확정된 모임 날짜 클릭 → 상세 페이지) */}
+        {/* 다음 모임 */}
         {meetings.length > 0 && (
           <div className="section">
-            <div className="section-title">{Icons.book} 모임 기록</div>
+            <div className="section-title">{Icons.calendar} 다음 모임</div>
             {meetings.map(m => (
               <div key={m.id} className="meeting-item" onClick={() => router.push(`/meeting/${m.id}`)}>
                 <div className="meeting-badge">
@@ -557,12 +603,12 @@ export default function SchedulePage() {
                   <p>{m.time||'시간 미정'} · {m.book_title||'도서 미선정'}</p>
                 </div>
                 <div style={{display:'flex',alignItems:'center',gap:'4px',flexWrap:'wrap'}}>
-                  <span className={`badge ${m.status==='completed'?'badge-completed':'badge-green'}`}>{m.status==='completed'?'완료':'확정'}</span>
-                  {isLeader && m.status==='confirmed' && (
-                    <button className="btn-danger-sm" style={{fontSize:'10px',padding:'2px 6px',background:'var(--bg-input)',color:'var(--text-sub)',border:'1px solid var(--border)'}} onClick={(e) => { e.stopPropagation(); handleCancelMeeting(m.id); }}>확정취소</button>
-                  )}
+                  {m.status==='completed' && <span className="badge badge-completed">완료</span>}
                   {isLeader && (
-                    <button className="btn-danger-sm" style={{fontSize:'10px',padding:'2px 6px'}} onClick={(e) => { e.stopPropagation(); handleDeleteMeeting(m.id); }}>삭제</button>
+                    <>
+                      <button className="btn-danger-sm" style={{fontSize:'10px',padding:'2px 8px',background:'var(--bg-input)',color:'var(--text-sub)',border:'1px solid var(--border)'}} onClick={(e) => { e.stopPropagation(); setForm({editMeetingId:m.id,date:m.date||'',time:m.time||'',bookTitle:m.book_title||''}); setModal('editMeeting'); }}>수정</button>
+                      <button className="btn-danger-sm" style={{fontSize:'10px',padding:'2px 6px'}} onClick={(e) => { e.stopPropagation(); handleDeleteMeeting(m.id); }}>삭제</button>
+                    </>
                   )}
                 </div>
               </div>
@@ -675,6 +721,33 @@ export default function SchedulePage() {
                   </div>
                 )}
                 {isExpired && <div className="poll-closed">투표가 마감되었습니다</div>}
+
+                {/* 댓글 */}
+                <div className="poll-comments">
+                  {p.comments.length > 0 && (
+                    <div className="poll-comments-list">
+                      {p.comments.map(c => (
+                        <div key={c.id} className="poll-comment">
+                          <span className="poll-comment-name">{getName(c.member_id)}</span>
+                          <span className="poll-comment-text">{c.content}</span>
+                          {(c.member_id === user?.id || isLeader) && (
+                            <button className="poll-comment-del" onClick={() => handleDeleteComment(c.id, p.id)}>x</button>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                  <div className="poll-comment-input">
+                    <input
+                      className="input"
+                      placeholder="의견을 남겨주세요..."
+                      value={commentInput[p.id] || ''}
+                      onChange={e => setCommentInput(prev => ({...prev, [p.id]: e.target.value}))}
+                      onKeyDown={e => e.key === 'Enter' && handleAddComment(p.id)}
+                    />
+                    <button className="poll-comment-send" onClick={() => handleAddComment(p.id)}>{Icons.chat}</button>
+                  </div>
+                </div>
               </div>
             );
           })}
@@ -784,13 +857,17 @@ export default function SchedulePage() {
                 <button className="del-btn" onClick={() => {
                   const arr = ((form.pollSchedules || [{date:'',time:'오후 3시'}]) as {date:string;time:string}[]).filter((_: {date:string;time:string}, i: number) => i !== idx);
                   setForm({...form, pollSchedules: arr});
-                }}>✕</button>
+                }}>x</button>
               </div>
             ))}
             <button className="btn btn-outline btn-full" style={{fontSize:'12px',padding:'7px'}} onClick={() => {
               const arr = [...((form.pollSchedules || [{date:'',time:'오후 3시'}]) as {date:string;time:string}[]), {date:'',time:'오후 3시'}];
               setForm({...form, pollSchedules: arr});
             }}>+ 일정 추가</button>
+          </div>
+          <div className="form-group">
+            <label className="form-label">투표 마감 기한</label>
+            <input className="input" type="date" value={form.pollDeadline||''} onChange={e => setForm({...form,pollDeadline:e.target.value})} />
           </div>
           <div className="modal-btns">
             <button className="btn btn-outline" style={{flex:1}} onClick={() => setModal(null)}>취소</button>
@@ -826,7 +903,7 @@ export default function SchedulePage() {
                 <button className="del-btn" onClick={() => {
                   const arr = ((form.pollSchedules || [{date:'',time:'오후 3시'}]) as {date:string;time:string}[]).filter((_: {date:string;time:string}, i: number) => i !== idx);
                   setForm({...form, pollSchedules: arr});
-                }}>✕</button>
+                }}>x</button>
               </div>
             ))}
             <button className="btn btn-outline btn-full" style={{fontSize:'12px',padding:'7px'}} onClick={() => {
@@ -834,10 +911,23 @@ export default function SchedulePage() {
               setForm({...form, pollSchedules: arr});
             }}>+ 일정 추가</button>
           </div>
+          <div className="form-group">
+            <label className="form-label">투표 마감 기한</label>
+            <input className="input" type="date" value={form.pollDeadline||''} onChange={e => setForm({...form,pollDeadline:e.target.value})} />
+          </div>
           <div className="modal-btns">
             <button className="btn btn-outline" style={{flex:1}} onClick={() => setModal(null)}>취소</button>
             <button className="btn btn-accent" style={{flex:1}} onClick={handleUpdatePoll}>수정</button>
           </div>
+        </div></div>
+      )}
+      {modal === 'editMeeting' && (
+        <div className="overlay" onClick={() => setModal(null)}><div className="modal" onClick={e => e.stopPropagation()}>
+          <h2>모임 수정</h2>
+          <div className="form-group"><label className="form-label">모임 날짜</label><input className="input" type="date" value={form.date||''} onChange={e => setForm({...form,date:e.target.value})} /></div>
+          <div className="form-group"><label className="form-label">모임 시간</label><input className="input" placeholder="오후 3시" value={form.time||''} onChange={e => setForm({...form,time:e.target.value})} /></div>
+          <div className="form-group"><label className="form-label">도서명</label><input className="input" placeholder="도서명" value={form.bookTitle||''} onChange={e => setForm({...form,bookTitle:e.target.value})} /></div>
+          <div className="modal-btns"><button className="btn btn-outline" style={{flex:1}} onClick={() => setModal(null)}>취소</button><button className="btn btn-accent" style={{flex:1}} onClick={handleEditMeeting}>수정</button></div>
         </div></div>
       )}
 

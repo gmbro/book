@@ -88,3 +88,11 @@ export interface PollVote {
   vote: 'participate' | 'not_participate';
   created_at: string;
 }
+
+export interface PollComment {
+  id: string;
+  poll_id: string;
+  member_id: string;
+  content: string;
+  created_at: string;
+}

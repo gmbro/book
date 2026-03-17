@@ -878,6 +878,65 @@ textarea.input { min-height: 90px; resize: vertical; }
   border-top: 1px solid var(--border);
 }
 
+/* ===== POLL COMMENTS ===== */
+.poll-comments {
+  border-top: 1px solid var(--border);
+  padding: 10px 16px 12px;
+}
+.poll-comments-list {
+  margin-bottom: 8px;
+}
+.poll-comment {
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+  padding: 4px 0;
+  font-size: 12px;
+  line-height: 1.5;
+}
+.poll-comment-name {
+  font-weight: 600;
+  color: var(--accent);
+  flex-shrink: 0;
+}
+.poll-comment-text {
+  color: var(--text);
+  flex: 1;
+  word-break: break-word;
+}
+.poll-comment-del {
+  background: none;
+  border: none;
+  color: var(--text-muted);
+  cursor: pointer;
+  font-size: 10px;
+  padding: 0 2px;
+  flex-shrink: 0;
+}
+.poll-comment-del:hover { color: var(--red); }
+.poll-comment-input {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+}
+.poll-comment-input .input {
+  flex: 1;
+  font-size: 12px;
+  padding: 7px 10px;
+}
+.poll-comment-send {
+  background: var(--accent);
+  color: white;
+  border: none;
+  border-radius: 8px;
+  padding: 6px 10px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  transition: opacity 0.15s;
+}
+.poll-comment-send:hover { opacity: 0.8; }
+
 /* ===== ANIMATIONS ===== */
 @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
 @keyframes slideUp { from { opacity: 0; transform: translateY(16px); } to { opacity: 1; transform: translateY(0); } }
