@@ -21,6 +21,8 @@ const Icons = {
   share: <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><line x1="8.59" y1="13.51" x2="15.42" y2="17.49"/><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"/></svg>,
   poll: <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M7 12h2v5H7z"/><path d="M11 8h2v9h-2z"/><path d="M15 5h2v12h-2z"/></svg>,
   clock: <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>,
+  menu: <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/></svg>,
+  settings: <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>,
 };
 
 interface ProposalWithVotes extends ScheduleProposal { votes: ScheduleVote[]; proposerName: string; deadline?: string; }
@@ -102,6 +104,7 @@ export default function SchedulePage() {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const [form, setForm] = useState<Record<string,any>>({});
   const [confirmAction, setConfirmAction] = useState<{msg:string;action:()=>void}|null>(null);
+  const [settingsOpen, setSettingsOpen] = useState(false);
 
   useEffect(() => {
     // 앱 데이터 버전 — 변경 시 로컬 스토리지 자동 초기화
@@ -511,18 +514,49 @@ export default function SchedulePage() {
     setForm({}); setModal(null);
   };
 
+  // ===== 생년월일 변경 =====
+  const handleChangeBirthday = async () => {
+    if (!user) return;
+    const newBday = form.newBirthday;
+    if (!/^\d{6}$/.test(newBday)) { alert('생년월일 6자리를 입력해주세요'); return; }
+    if (newBday !== form.newBirthdayConfirm) { alert('생년월일이 일치하지 않습니다'); return; }
+    if (useLocal) {
+      const updated = { ...user, birthday: newBday };
+      const um = members.map(m => m.id === user.id ? updated : m);
+      setMembers(um);
+      localStorage.setItem('membersList', JSON.stringify(um));
+      localStorage.setItem('currentUser', JSON.stringify(updated));
+      setUser(updated);
+    } else {
+      await supabase.from('members').update({ birthday: newBday }).eq('id', user.id);
+      const updated = { ...user, birthday: newBday };
+      localStorage.setItem('currentUser', JSON.stringify(updated));
+      setUser(updated);
+    }
+    setForm({}); setModal(null);
+    alert('생년월일이 변경되었습니다.');
+  };
+
   /* ===== 메인 원페이지 ===== */
   return (
     <div className="app">
       <div className="content">
-        {/* 환영 문구 + 뒤로가기 */}
-        <div style={{display:'flex',alignItems:'center',gap:'10px',marginBottom:'12px'}}>
-          <button className="back-btn" style={{width:'30px',height:'30px',fontSize:'14px'}} onClick={() => router.push('/')}>←</button>
-          <div>
-            <div style={{fontSize:'15px',fontWeight:600}}>1+1 독서모임</div>
-            <div style={{fontSize:'12px',color:'var(--text-muted)'}}>{user?.name}님, 반가워요</div>
+        {/* 헤더 */}
+        <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:'12px'}}>
+          <div style={{display:'flex',alignItems:'center',gap:'10px'}}>
+            <button className="back-btn" style={{width:'30px',height:'30px',fontSize:'14px'}} onClick={() => router.push('/')}>←</button>
+            <div>
+              <div style={{fontSize:'15px',fontWeight:600}}>1+1 독서모임</div>
+              <div style={{fontSize:'12px',color:'var(--text-muted)'}}>{user?.name}님, 반가워요</div>
+            </div>
           </div>
+          <button className="hamburger-btn" onClick={() => setSettingsOpen(!settingsOpen)}>{Icons.menu}</button>
         </div>
+        {settingsOpen && (
+          <div className="settings-panel">
+            <button className="settings-item" onClick={() => { setSettingsOpen(false); setModal('changeBday'); }}>{Icons.settings} 생년월일 변경</button>
+          </div>
+        )}
 
         {/* 달력 */}
         <Calendar proposedDates={proposedDates} confirmedDates={confirmedDates} onDateClick={handleCalendarDateClick} />
@@ -955,6 +989,25 @@ export default function SchedulePage() {
             <div className="modal-btns">
               <button className="btn btn-outline" style={{flex:1}} onClick={() => setConfirmAction(null)}>취소</button>
               <button className="btn btn-accent" style={{flex:1}} onClick={confirmAction.action}>확인</button>
+            </div>
+          </div>
+        </div>
+      )}
+      {modal === 'changeBday' && (
+        <div className="overlay" onClick={() => setModal(null)}>
+          <div className="modal" onClick={e => e.stopPropagation()} style={{maxWidth:'340px',textAlign:'center'}}>
+            <h2>생년월일 변경</h2>
+            <div className="form-group">
+              <label className="form-label">새 생년월일 6자리</label>
+              <input className="input" type="text" inputMode="numeric" maxLength={6} placeholder="예: 901002" value={form.newBirthday||''} onChange={e => setForm({...form,newBirthday:e.target.value.replace(/\D/g,'')})} style={{textAlign:'center',fontSize:'16px',letterSpacing:'3px'}} />
+            </div>
+            <div className="form-group">
+              <label className="form-label">생년월일 확인</label>
+              <input className="input" type="text" inputMode="numeric" maxLength={6} placeholder="한 번 더 입력" value={form.newBirthdayConfirm||''} onChange={e => setForm({...form,newBirthdayConfirm:e.target.value.replace(/\D/g,'')})} style={{textAlign:'center',fontSize:'16px',letterSpacing:'3px'}} />
+            </div>
+            <div className="modal-btns">
+              <button className="btn btn-outline" style={{flex:1}} onClick={() => setModal(null)}>취소</button>
+              <button className="btn btn-accent" style={{flex:1}} onClick={handleChangeBirthday}>저장</button>
             </div>
           </div>
         </div>

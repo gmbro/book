@@ -19,6 +19,7 @@ export interface Member {
   id: string;
   name: string;
   role: 'leader' | 'member';
+  birthday?: string | null;
   created_at: string;
 }
 
