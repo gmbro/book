@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
-import { supabase, Member, ScheduleProposal, ScheduleVote, Meeting, DiscussionItem, MeetingRecord } from '@/lib/supabase';
+import { supabase, Member, ScheduleProposal, ScheduleVote, Meeting } from '@/lib/supabase';
 import Calendar from '@/components/Calendar';
 
 /* ===== SVG 픽토그램 ===== */
@@ -89,23 +89,13 @@ export default function SchedulePage() {
   const [meetings, setMeetings] = useState<Meeting[]>([]);
   const [useLocal, setUseLocal] = useState(false);
 
-  // 모임 상세 관련
-  const [selectedMeeting, setSelectedMeeting] = useState<Meeting | null>(null);
-  const [detailTab, setDetailTab] = useState<'book'|'disc'|'rec'>('book');
-  const [discussions, setDiscussions] = useState<DiscussionItem[]>([]);
-  const [record, setRecord] = useState<MeetingRecord | null>(null);
+  // 모임 상세 관련 (별도 페이지로 이동)
   const [showGuide, setShowGuide] = useState(false);
 
   // 모달
   const [modal, setModal] = useState<string | null>(null);
-  const [form, setForm] = useState<Record<string, string>>({});
-
-  // 녹음
-  const [isRec, setIsRec] = useState(false);
-  const [recTime, setRecTime] = useState(0);
-  const [recorder, setRecorder] = useState<MediaRecorder | null>(null);
-  const [audioUrl, setAudioUrl] = useState<string | null>(null);
-  const [summaryLoading, setSummaryLoading] = useState(false);
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const [form, setForm] = useState<Record<string,any>>({});
 
   useEffect(() => {
     const u = localStorage.getItem('currentUser');
@@ -118,12 +108,6 @@ export default function SchedulePage() {
       localStorage.setItem('guideShown', 'true');
     }
   }, [router]);
-
-  useEffect(() => {
-    let iv: NodeJS.Timeout;
-    if (isRec) iv = setInterval(() => setRecTime(t => t + 1), 1000);
-    return () => clearInterval(iv);
-  }, [isRec]);
 
   const init = async () => {
     try {
@@ -210,7 +194,7 @@ export default function SchedulePage() {
 
   const handleAddProposal = async () => {
     if (!user || !form.title) return;
-    const dates = form.dates ? form.dates.split(',').map(d => d.trim()).filter(Boolean) : [];
+    const dates = form.dates ? (form.dates as string).split(',').map((d: string) => d.trim()).filter(Boolean) : [];
     if (useLocal) {
       const np: ProposalWithVotes = { id: `p-${Date.now()}`, title: form.title, description: form.desc || null, proposed_by: user.id, dates, created_at: '', votes: [], proposerName: user.name, deadline: form.deadline || undefined };
       const up = [...proposals, np]; setProposals(up); saveProposals(up);
@@ -245,87 +229,11 @@ export default function SchedulePage() {
     }
   };
 
-  // 달력에서 확정된 날짜 클릭
+  // 달력에서 확정된 날짜 클릭 → 상세 페이지로 이동
   const handleCalendarDateClick = (dateStr: string) => {
     const m = meetings.find(mt => mt.date === dateStr);
-    if (m) openMeeting(m);
+    if (m) router.push(`/meeting/${m.id}`);
   };
-
-  // ===== 모임 상세 =====
-  const openMeeting = async (m: Meeting) => {
-    setSelectedMeeting(m); setDetailTab('book');
-    if (useLocal) {
-      const sd = localStorage.getItem(`discussions-${m.id}`);
-      setDiscussions(sd ? JSON.parse(sd) : []);
-      const sr = localStorage.getItem(`record-${m.id}`);
-      setRecord(sr ? JSON.parse(sr) : null);
-    } else {
-      const { data: dd } = await supabase.from('discussion_items').select('*').eq('meeting_id', m.id).order('created_at');
-      setDiscussions(dd || []);
-      const { data: rd } = await supabase.from('meeting_records').select('*').eq('meeting_id', m.id).order('created_at', { ascending: false }).limit(1).single();
-      setRecord(rd || null);
-    }
-  };
-
-  const saveBook = async () => {
-    if (!selectedMeeting) return;
-    const up = { ...selectedMeeting, book_title: form.bookTitle || null, book_author: form.bookAuthor || null };
-    setSelectedMeeting(up);
-    if (useLocal) {
-      const um = meetings.map(m => m.id === up.id ? up : m); setMeetings(um); saveMeetings(um);
-    } else { await supabase.from('meetings').update({ book_title: form.bookTitle, book_author: form.bookAuthor }).eq('id', up.id); }
-    setModal(null);
-  };
-
-  const addDiscussion = async () => {
-    if (!user || !form.discContent || !selectedMeeting) return;
-    const item: DiscussionItem = { id: `d-${Date.now()}`, meeting_id: selectedMeeting.id, author_id: user.id, type: (form.discType as 'topic'|'question') || 'topic', content: form.discContent, created_at: '' };
-    const ud = [...discussions, item]; setDiscussions(ud);
-    if (useLocal) localStorage.setItem(`discussions-${selectedMeeting.id}`, JSON.stringify(ud));
-    else await supabase.from('discussion_items').insert({ meeting_id: selectedMeeting.id, author_id: user.id, type: form.discType || 'topic', content: form.discContent });
-    setForm({}); setModal(null);
-  };
-
-  const saveRecord = async () => {
-    if (!selectedMeeting) return;
-    const r: MeetingRecord = { id: record?.id || `r-${Date.now()}`, meeting_id: selectedMeeting.id, content: form.recContent || null, audio_url: audioUrl, ai_summary: record?.ai_summary || null, created_at: '' };
-    setRecord(r);
-    if (useLocal) localStorage.setItem(`record-${selectedMeeting.id}`, JSON.stringify(r));
-    else if (record?.id) await supabase.from('meeting_records').update({ content: form.recContent }).eq('id', record.id);
-    else await supabase.from('meeting_records').insert({ meeting_id: selectedMeeting.id, content: form.recContent, audio_url: audioUrl });
-    setModal(null);
-  };
-
-  const doSummary = async () => {
-    if (!record?.content && discussions.length === 0) { alert('요약할 내용이 없습니다.'); return; }
-    setSummaryLoading(true);
-    try {
-      const content = [selectedMeeting?.book_title ? `도서: ${selectedMeeting.book_title}` : '', ...discussions.map(d => `${d.type === 'topic' ? '발제문' : '질문'}: ${d.content}`), record?.content ? `기록: ${record.content}` : ''].filter(Boolean).join('\n');
-      const res = await fetch('/api/summarize', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ content }) });
-      const data = await res.json();
-      if (data.summary) {
-        const ur = { ...(record || { id: `r-${Date.now()}`, meeting_id: selectedMeeting!.id, content: null, audio_url: null, created_at: '' }), ai_summary: data.summary };
-        setRecord(ur);
-        if (useLocal) localStorage.setItem(`record-${selectedMeeting!.id}`, JSON.stringify(ur));
-        else await supabase.from('meeting_records').update({ ai_summary: data.summary }).eq('id', record!.id);
-      }
-    } catch { /* ignore */ }
-    setSummaryLoading(false);
-  };
-
-  // 녹음
-  const startRec = async () => {
-    try {
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      const mr = new MediaRecorder(stream);
-      const chunks: BlobPart[] = [];
-      mr.ondataavailable = e => chunks.push(e.data);
-      mr.onstop = () => { setAudioUrl(URL.createObjectURL(new Blob(chunks, { type: 'audio/webm' }))); stream.getTracks().forEach(t => t.stop()); };
-      mr.start(); setRecorder(mr); setIsRec(true); setRecTime(0);
-    } catch { alert('마이크 접근이 거부되었습니다.'); }
-  };
-  const stopRec = () => { recorder?.stop(); setIsRec(false); };
-  const fmtTime = (s: number) => `${Math.floor(s/60).toString().padStart(2,'0')}:${(s%60).toString().padStart(2,'0')}`;
 
   // 멤버 관리
   const addMember = async () => {
@@ -381,7 +289,7 @@ export default function SchedulePage() {
           <div className="section">
             <div className="section-title">{Icons.pin} 확정된 모임</div>
             {meetings.map(m => (
-              <div key={m.id} className="meeting-item" onClick={() => openMeeting(m)}>
+              <div key={m.id} className="meeting-item" onClick={() => router.push(`/meeting/${m.id}`)}>
                 <div className="meeting-badge">
                   <span className="mm">{m.date ? new Date(m.date+'T00:00:00').toLocaleDateString('ko',{month:'short'}) : ''}</span>
                   <span className="dd">{m.date ? new Date(m.date+'T00:00:00').getDate() : '?'}</span>
@@ -401,7 +309,8 @@ export default function SchedulePage() {
           </div>
         )}
 
-        {/* 모임 일정 (투표) */}
+        {/* 모임 일정 (투표) - 확정된 모임이 없을 때만 표시 */}
+        {meetings.length === 0 && (
         <div className="section">
           <div className="section-title">{Icons.vote} 모임 일정</div>
           {proposals.map(p => {
@@ -473,106 +382,30 @@ export default function SchedulePage() {
           })}
 
         </div>
-
-        {/* ===== 모임 상세 목업 (확정 전 프리뷰) ===== */}
-        {!selectedMeeting && meetings.length === 0 && (
-          <div className="section" style={{opacity:0.45,position:'relative',pointerEvents:'none'}}>
-            <div style={{position:'absolute',top:'50%',left:'50%',transform:'translate(-50%,-50%)',zIndex:1,textAlign:'center',background:'rgba(255,255,255,0.95)',padding:'12px 20px',borderRadius:'var(--r)',border:'1px solid var(--border)',pointerEvents:'auto'}}>
-              <div style={{fontSize:'13px',color:'var(--text)',fontWeight:600,marginBottom:'2px'}}>모임 상세 페이지</div>
-              <div style={{fontSize:'11px',color:'var(--text-muted)'}}>일정을 확정하면 달력에서 해당 날짜를<br/>클릭하여 상세 내용을 관리할 수 있어요</div>
-            </div>
-            <div className="tabs">
-              <button className="tab on" disabled>도서</button>
-              <button className="tab" disabled>발제문</button>
-              <button className="tab" disabled>기록</button>
-            </div>
-            <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:'10px'}}>
-              <div className="section-title" style={{marginBottom:0}}>{Icons.book} 선정 도서</div>
-              <button className="btn btn-sm btn-outline" disabled>선정하기</button>
-            </div>
-            <div className="empty">아직 도서가 선정되지 않았습니다</div>
-          </div>
         )}
 
-        {/* ===== 모임 상세 (달력에서 확정일 클릭 시) ===== */}
-        {selectedMeeting && (
-          <div className="section" style={{border:'2px solid var(--green)',position:'relative'}}>
-            <button onClick={() => setSelectedMeeting(null)} style={{position:'absolute',top:'10px',right:'12px',background:'none',border:'none',fontSize:'16px',cursor:'pointer',color:'var(--text-muted)'}}>✕</button>
-            <div style={{fontSize:'13px',color:'var(--green)',marginBottom:'8px',fontWeight:600}}>
-              {selectedMeeting.date ? new Date(selectedMeeting.date+'T00:00:00').toLocaleDateString('ko',{year:'numeric',month:'long',day:'numeric',weekday:'short'}) : ''} {selectedMeeting.time||''}
-            </div>
-            <div className="tabs">
-              <button className={`tab ${detailTab==='book'?'on':''}`} onClick={() => setDetailTab('book')}>도서</button>
-              <button className={`tab ${detailTab==='disc'?'on':''}`} onClick={() => setDetailTab('disc')}>발제문</button>
-              <button className={`tab ${detailTab==='rec'?'on':''}`} onClick={() => setDetailTab('rec')}>기록</button>
-            </div>
-
-            {detailTab === 'book' && (
-              <>
-                <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:'10px'}}>
-                  <div className="section-title" style={{marginBottom:0}}>{Icons.book} 선정 도서</div>
-                  <button className="btn btn-sm btn-outline" onClick={() => { setForm({bookTitle:selectedMeeting.book_title||'',bookAuthor:selectedMeeting.book_author||''}); setModal('book'); }}>
-                    {selectedMeeting.book_title ? '수정' : '선정하기'}
-                  </button>
+        {/* 모임 기록 리스트 (확정된 모임 날짜 클릭 → 상세 페이지) */}
+        {meetings.length > 0 && (
+          <div className="section">
+            <div className="section-title">{Icons.book} 모임 기록</div>
+            {meetings.map(m => (
+              <div key={m.id} className="meeting-item" onClick={() => router.push(`/meeting/${m.id}`)}>
+                <div className="meeting-badge">
+                  <span className="mm">{m.date ? new Date(m.date+'T00:00:00').toLocaleDateString('ko',{month:'short'}) : ''}</span>
+                  <span className="dd">{m.date ? new Date(m.date+'T00:00:00').getDate() : '?'}</span>
                 </div>
-                {selectedMeeting.book_title ? (
-                  <div className="book-box">
-                    <div style={{fontSize:'14px',marginBottom:'2px'}}>{selectedMeeting.book_title}</div>
-                    <div style={{fontSize:'12px',color:'var(--text-muted)'}}>{selectedMeeting.book_author||'저자 미상'}</div>
-                  </div>
-                ) : <div className="empty">아직 도서가 선정되지 않았습니다</div>}
-              </>
-            )}
-
-            {detailTab === 'disc' && (
-              <>
-                <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:'10px'}}>
-                  <div className="section-title" style={{marginBottom:0}}>{Icons.chat} 발제문 · 질문</div>
-                  <button className="btn btn-sm btn-outline" onClick={() => { setForm({discType:'topic',discContent:''}); setModal('disc'); }}>+ 추가</button>
+                <div className="meeting-info">
+                  <h4>{m.date ? new Date(m.date+'T00:00:00').toLocaleDateString('ko',{month:'long',day:'numeric',weekday:'short'}) : '미정'}</h4>
+                  <p>{m.time||'시간 미정'} · {m.book_title||'도서 미선정'}</p>
                 </div>
-                {discussions.length > 0 ? discussions.map(d => (
-                  <div key={d.id} className="disc-item">
-                    <div className={`disc-type ${d.type}`}>{d.type==='topic'?'발제문':'질문'}</div>
-                    <div className="disc-content">{d.content}</div>
-                    <div className="disc-meta">{getName(d.author_id)}</div>
-                  </div>
-                )) : <div className="empty">아직 발제문이 없습니다</div>}
-              </>
-            )}
-
-            {detailTab === 'rec' && (
-              <>
-                <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:'10px'}}>
-                  <div className="section-title" style={{marginBottom:0}}>{Icons.edit} 모임 기록</div>
-                  <button className="btn btn-sm btn-outline" onClick={() => { setForm({recContent:record?.content||''}); setModal('rec'); }}>
-                    {record?.content ? '수정' : '기록하기'}
-                  </button>
+                <div style={{display:'flex',alignItems:'center',gap:'6px'}}>
+                  <span className={`badge ${m.status==='completed'?'badge-completed':'badge-green'}`}>{m.status==='completed'?'완료':'확정'}</span>
+                  {m.status==='confirmed' && (
+                    <button className="btn-danger-sm" style={{fontSize:'10px',padding:'2px 6px'}} onClick={(e) => { e.stopPropagation(); handleCompleteMeeting(m.id); }}>완료</button>
+                  )}
                 </div>
-                {record?.content ? <div style={{fontSize:'13px',lineHeight:'1.7',whiteSpace:'pre-wrap',padding:'10px',background:'var(--bg-input)',borderRadius:'var(--r-sm)',border:'1px solid var(--border)'}}>{record.content}</div> : <div className="empty" style={{marginBottom:'10px'}}>아직 기록이 없습니다</div>}
-
-                <div className="recorder" style={{marginTop:'10px',marginBottom:'10px'}}>
-                  <div style={{fontSize:'12px',color:'var(--text-sub)',marginBottom:'8px',display:'flex',alignItems:'center',gap:'6px'}}>{Icons.mic} 음성 녹음</div>
-                  <div className="rec-controls">
-                    <button className={`rec-btn ${isRec?'on':''}`} onClick={isRec ? stopRec : startRec}>{isRec ? '⏹' : '●'}</button>
-                    <div>
-                      <div className="rec-status">{isRec ? '녹음 중...' : '대기'}</div>
-                      <div className="rec-time">{fmtTime(recTime)}</div>
-                    </div>
-                  </div>
-                  {audioUrl && <audio src={audioUrl} controls style={{width:'100%',marginTop:'8px'}} />}
-                </div>
-
-                <div className="ai-box">
-                  <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:'6px'}}>
-                    <h4>{Icons.star} AI 요약</h4>
-                    <button className="btn btn-sm btn-accent" onClick={doSummary} disabled={summaryLoading}>{summaryLoading ? '생성 중...' : '요약 생성'}</button>
-                  </div>
-                  {record?.ai_summary ? (
-                    <div style={{fontSize:'13px',lineHeight:'1.7',color:'var(--text-sub)'}} dangerouslySetInnerHTML={{__html: record.ai_summary.replace(/\n/g,'<br/>')}} />
-                  ) : <div style={{fontSize:'12px',color:'var(--text-muted)'}}>기록을 기반으로 AI 요약을 생성하세요</div>}
-                </div>
-              </>
-            )}
+              </div>
+            ))}
           </div>
         )}
 
