@@ -449,13 +449,18 @@ export default function SchedulePage() {
                     const votedIds = new Set(p.votes.map(v => v.member_id));
                     const notVoted = members.filter(m => !votedIds.has(m.id));
                     return notVoted.length > 0 ? (
-                      <div className="vote-member-row" style={{alignItems:'center'}}>
-                        <span className="vote-member-label">미참</span>
-                        {notVoted.map(m => <span key={m.id} className="vote-member-tag">{m.name}</span>)}
-                        <button onClick={() => shareReminder(p)} style={{marginLeft:'auto',background:'none',border:'1px solid var(--border)',borderRadius:'6px',padding:'2px 8px',cursor:'pointer',display:'flex',alignItems:'center',gap:'3px',fontSize:'10px',color:'var(--text-sub)',fontFamily:'inherit'}}>
-                          {Icons.share} 알림
-                        </button>
-                      </div>
+                      <>
+                        <div className="vote-member-row" style={{alignItems:'center'}}>
+                          <span className="vote-member-label">미참</span>
+                          {notVoted.map(m => <span key={m.id} className="vote-member-tag">{m.name}</span>)}
+                          <button onClick={() => shareReminder(p)} style={{marginLeft:'auto',background:'none',border:'1px solid var(--border)',borderRadius:'6px',padding:'2px 8px',cursor:'pointer',display:'flex',alignItems:'center',gap:'3px',fontSize:'10px',color:'var(--text-sub)',fontFamily:'inherit'}} title="미참여자에게 투표 독려 메시지를 보냅니다">
+                            {Icons.share} 알림
+                          </button>
+                        </div>
+                        <div style={{fontSize:'10px',color:'var(--text-muted)',marginTop:'2px',paddingLeft:'40px'}}>
+                          ※ 알림 버튼을 누르면 미참여자에게 투표 독려 메시지를 보낼 수 있어요
+                        </div>
+                      </>
                     ) : null;
                   })()}
                 </div>
@@ -468,6 +473,26 @@ export default function SchedulePage() {
           })}
 
         </div>
+
+        {/* ===== 모임 상세 목업 (확정 전 프리뷰) ===== */}
+        {!selectedMeeting && meetings.length === 0 && (
+          <div className="section" style={{opacity:0.45,position:'relative',pointerEvents:'none'}}>
+            <div style={{position:'absolute',top:'50%',left:'50%',transform:'translate(-50%,-50%)',zIndex:1,textAlign:'center',background:'rgba(255,255,255,0.95)',padding:'12px 20px',borderRadius:'var(--r)',border:'1px solid var(--border)',pointerEvents:'auto'}}>
+              <div style={{fontSize:'13px',color:'var(--text)',fontWeight:600,marginBottom:'2px'}}>모임 상세 페이지</div>
+              <div style={{fontSize:'11px',color:'var(--text-muted)'}}>일정을 확정하면 달력에서 해당 날짜를<br/>클릭하여 상세 내용을 관리할 수 있어요</div>
+            </div>
+            <div className="tabs">
+              <button className="tab on" disabled>도서</button>
+              <button className="tab" disabled>발제문</button>
+              <button className="tab" disabled>기록</button>
+            </div>
+            <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:'10px'}}>
+              <div className="section-title" style={{marginBottom:0}}>{Icons.book} 선정 도서</div>
+              <button className="btn btn-sm btn-outline" disabled>선정하기</button>
+            </div>
+            <div className="empty">아직 도서가 선정되지 않았습니다</div>
+          </div>
+        )}
 
         {/* ===== 모임 상세 (달력에서 확정일 클릭 시) ===== */}
         {selectedMeeting && (
