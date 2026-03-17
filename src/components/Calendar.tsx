@@ -2,110 +2,60 @@
 
 import { useState } from 'react';
 
+const DAYS = ['일', '월', '화', '수', '목', '금', '토'];
+
 interface CalendarProps {
   proposedDates?: string[];
   confirmedDates?: string[];
-  onDateClick?: (date: string) => void;
 }
 
-const DAYS = ['일', '월', '화', '수', '목', '금', '토'];
-
-export default function Calendar({ proposedDates = [], confirmedDates = [], onDateClick }: CalendarProps) {
-  const [currentDate, setCurrentDate] = useState(new Date());
-
-  const year = currentDate.getFullYear();
-  const month = currentDate.getMonth();
-
-  const firstDay = new Date(year, month, 1).getDay();
-  const daysInMonth = new Date(year, month + 1, 0).getDate();
-  const daysInPrevMonth = new Date(year, month, 0).getDate();
-
+export default function Calendar({ proposedDates = [], confirmedDates = [] }: CalendarProps) {
+  const [cur, setCur] = useState(new Date());
+  const y = cur.getFullYear(), m = cur.getMonth();
+  const first = new Date(y, m, 1).getDay();
+  const days = new Date(y, m + 1, 0).getDate();
+  const prevDays = new Date(y, m, 0).getDate();
   const today = new Date();
-  const todayStr = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
+  const todayStr = `${today.getFullYear()}-${String(today.getMonth()+1).padStart(2,'0')}-${String(today.getDate()).padStart(2,'0')}`;
 
-  const prevMonth = () => {
-    setCurrentDate(new Date(year, month - 1, 1));
-  };
+  const fmt = (y: number, m: number, d: number) => `${y}-${String(m+1).padStart(2,'0')}-${String(d).padStart(2,'0')}`;
 
-  const nextMonth = () => {
-    setCurrentDate(new Date(year, month + 1, 1));
-  };
-
-  const goToday = () => {
-    setCurrentDate(new Date());
-  };
-
-  const formatDateStr = (y: number, m: number, d: number) => {
-    return `${y}-${String(m + 1).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
-  };
-
-  const renderDays = () => {
-    const cells = [];
-
-    // Previous month days
-    for (let i = firstDay - 1; i >= 0; i--) {
-      const day = daysInPrevMonth - i;
-      cells.push(
-        <div key={`prev-${day}`} className="calendar-day other-month">
-          {day}
-        </div>
-      );
-    }
-
-    // Current month days
-    for (let day = 1; day <= daysInMonth; day++) {
-      const dateStr = formatDateStr(year, month, day);
-      const isToday = dateStr === todayStr;
-      const hasProposal = proposedDates.includes(dateStr);
-      const isConfirmed = confirmedDates.includes(dateStr);
-
-      cells.push(
-        <div
-          key={`curr-${day}`}
-          className={`calendar-day ${isToday ? 'today' : ''} ${hasProposal || isConfirmed ? 'has-proposal' : ''}`}
-          onClick={() => (hasProposal || isConfirmed) && onDateClick?.(dateStr)}
-        >
-          {day}
-          {(hasProposal || isConfirmed) && (
-            <div className="calendar-dots">
-              {hasProposal && <span className="calendar-dot" />}
-              {isConfirmed && <span className="calendar-dot confirmed" />}
-            </div>
-          )}
-        </div>
-      );
-    }
-
-    // Next month days
-    const remaining = 42 - cells.length;
-    for (let day = 1; day <= remaining; day++) {
-      cells.push(
-        <div key={`next-${day}`} className="calendar-day other-month">
-          {day}
-        </div>
-      );
-    }
-
-    return cells;
-  };
+  const cells = [];
+  for (let i = first - 1; i >= 0; i--) cells.push({ d: prevDays - i, other: true, str: '' });
+  for (let d = 1; d <= days; d++) cells.push({ d, other: false, str: fmt(y, m, d) });
+  const rem = 42 - cells.length;
+  for (let d = 1; d <= rem; d++) cells.push({ d, other: true, str: '' });
 
   return (
-    <div className="calendar">
-      <div className="calendar-nav">
-        <div className="calendar-nav-btns">
-          <button onClick={prevMonth}>‹</button>
+    <div className="section">
+      <div className="cal-nav">
+        <div className="cal-nav-btns">
+          <button onClick={() => setCur(new Date(y, m-1, 1))}>‹</button>
         </div>
-        <h3>{year}년 {month + 1}월</h3>
-        <div className="calendar-nav-btns">
-          <button className="today-btn" onClick={goToday}>오늘</button>
-          <button onClick={nextMonth}>›</button>
+        <h3>{y}년 {m+1}월</h3>
+        <div className="cal-nav-btns">
+          <button className="cal-today-btn" onClick={() => setCur(new Date())}>오늘</button>
+          <button onClick={() => setCur(new Date(y, m+1, 1))}>›</button>
         </div>
       </div>
-      <div className="calendar-grid">
-        {DAYS.map(d => (
-          <div key={d} className="calendar-day-header">{d}</div>
-        ))}
-        {renderDays()}
+      <div className="cal-grid">
+        {DAYS.map(d => <div key={d} className="cal-head">{d}</div>)}
+        {cells.map((c, i) => {
+          const isToday = c.str === todayStr;
+          const hasProp = proposedDates.includes(c.str);
+          const hasConf = confirmedDates.includes(c.str);
+          return (
+            <div key={i} className={`cal-day ${c.other ? 'other' : ''} ${isToday ? 'today' : ''}`}>
+              {c.d}
+              {(hasProp || hasConf) && (
+                <div className="cal-dots">
+                  {hasProp && <span className="cal-dot" />}
+                  {hasConf && <span className="cal-dot confirmed" />}
+                </div>
+              )}
+            </div>
+          );
+        })}
       </div>
     </div>
   );
