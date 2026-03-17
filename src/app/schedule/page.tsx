@@ -224,6 +224,7 @@ export default function SchedulePage() {
 
   const handleConfirm = async () => {
     if (!form.proposal || !form.date) return;
+    if (!confirm('이번 모임은 이 일정으로 확정하시겠습니까?')) return;
     const m: Meeting = { id: `m-${Date.now()}`, date: form.date, time: form.time || '오후 3시', location: null, status: 'confirmed', proposal_id: form.proposal, book_title: null, book_author: null, created_at: '' };
     if (useLocal) { const um = [...meetings, m]; setMeetings(um); saveMeetings(um); }
     else { await supabase.from('meetings').insert({ date: form.date, time: form.time || '오후 3시', status: 'confirmed', proposal_id: form.proposal }); init(); }
@@ -491,6 +492,12 @@ export default function SchedulePage() {
       </div>
 
       <div className="content">
+        {/* 일정 제안/확정 버튼 (달력 상단) */}
+        <div style={{display:'flex',gap:'6px',marginBottom:'12px'}}>
+          <button className="btn btn-accent btn-full" onClick={() => { setForm({}); setModal('propose'); }}>+ 일정 제안하기</button>
+          <button className="btn btn-green" onClick={() => { setForm({}); setModal('confirm'); }}>확정</button>
+        </div>
+
         {/* 달력 */}
         <Calendar proposedDates={proposedDates} confirmedDates={confirmedDates} />
 
@@ -571,10 +578,6 @@ export default function SchedulePage() {
             );
           })}
 
-          <div style={{display:'flex',gap:'6px',marginTop:'10px'}}>
-            <button className="btn btn-accent btn-full" onClick={() => { setForm({}); setModal('propose'); }}>+ 일정 제안하기</button>
-            {isLeader && <button className="btn btn-green" onClick={() => { setForm({}); setModal('confirm'); }}>확정</button>}
-          </div>
         </div>
 
         {/* ===== 모임 상세 (항상 표시) ===== */}
