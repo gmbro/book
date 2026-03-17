@@ -101,10 +101,10 @@ export default function SchedulePage() {
 
   useEffect(() => {
     // 앱 데이터 버전 — 변경 시 로컬 스토리지 자동 초기화
-    const APP_DATA_VERSION = '3';
+    const APP_DATA_VERSION = '4';
     const storedVer = localStorage.getItem('app_data_version');
     if (storedVer !== APP_DATA_VERSION) {
-      const cu = localStorage.getItem('currentUser'); // 로그인 유지
+      const cu = localStorage.getItem('currentUser');
       localStorage.clear();
       if (cu) localStorage.setItem('currentUser', cu);
       localStorage.setItem('app_data_version', APP_DATA_VERSION);
@@ -136,14 +136,12 @@ export default function SchedulePage() {
           }
           setProposals(pv);
         } else {
-          // insert initial proposals
           const leader = md.find(m => m.role === 'leader');
           if (leader) {
             for (const ip of INITIAL_PROPOSALS) {
               await supabase.from('schedule_proposals').insert({ title: ip.title, description: ip.desc, proposed_by: leader.id, dates: ip.dates });
             }
           }
-          // reload
           const { data: pd2 } = await supabase.from('schedule_proposals').select('*').order('created_at');
           if (pd2) {
             setProposals(pd2.map(p => ({ ...p, votes: [], proposerName: md.find(m => m.id === p.proposed_by)?.name || '?' })));
@@ -158,18 +156,29 @@ export default function SchedulePage() {
     loadLocal();
   };
 
-  const PROPOSALS_VERSION = '2';  // 투표 데이터 갱신 시 버전업
   const loadLocal = () => {
+    // 항상 초기 투표 데이터가 포함된 proposals로 시작
+    const fresh = buildInitialProposals();
     const sp = localStorage.getItem('proposals');
-    const ver = localStorage.getItem('proposals_version');
-    if (sp && ver === PROPOSALS_VERSION) {
-      setProposals(JSON.parse(sp));
+    if (sp) {
+      const stored: ProposalWithVotes[] = JSON.parse(sp);
+      // 초기 3개 proposal은 투표 데이터 보존, 사용자 추가분은 유지
+      const initialIds = new Set(fresh.map(p => p.id));
+      const userAdded = stored.filter(p => !initialIds.has(p.id));
+      // 초기 proposals에 사용자의 개별 투표 반영 (merge)
+      const merged = fresh.map(fp => {
+        const sp = stored.find(s => s.id === fp.id);
+        if (!sp) return fp;
+        // 사용자가 투표한 데이터를 초기 데이터에 병합
+        const initialMemberIds = new Set(fp.votes.map(v => v.member_id));
+        const userVotes = sp.votes.filter(v => !initialMemberIds.has(v.member_id));
+        return { ...fp, votes: [...fp.votes, ...userVotes] };
+      });
+      setProposals([...merged, ...userAdded]);
     } else {
-      const fresh = buildInitialProposals();
       setProposals(fresh);
-      localStorage.setItem('proposals', JSON.stringify(fresh));
-      localStorage.setItem('proposals_version', PROPOSALS_VERSION);
     }
+    localStorage.setItem('proposals', JSON.stringify(fresh));
     const sm = localStorage.getItem('meetings');
     if (sm) setMeetings(JSON.parse(sm));
     const ml = localStorage.getItem('membersList');
@@ -428,9 +437,6 @@ export default function SchedulePage() {
                 </div>
                 <div style={{display:'flex',alignItems:'center',gap:'4px',flexWrap:'wrap'}}>
                   <span className={`badge ${m.status==='completed'?'badge-completed':'badge-green'}`}>{m.status==='completed'?'완료':'확정'}</span>
-                  {isLeader && m.status==='confirmed' && (
-                    <button className="btn-danger-sm" style={{fontSize:'10px',padding:'2px 6px'}} onClick={(e) => { e.stopPropagation(); handleCompleteMeeting(m.id); }}>완료</button>
-                  )}
                   {isLeader && m.status==='confirmed' && (
                     <button className="btn-danger-sm" style={{fontSize:'10px',padding:'2px 6px',background:'var(--bg-input)',color:'var(--text-sub)',border:'1px solid var(--border)'}} onClick={(e) => { e.stopPropagation(); handleCancelMeeting(m.id); }}>확정취소</button>
                   )}
