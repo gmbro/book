@@ -668,6 +668,125 @@ export default function SchedulePage() {
 
         </div>
 
+        {/* 일정 투표 카드 */}
+        {polls.map(p => {
+          const uv = user ? p.votes.find(v => v.member_id === user.id)?.vote : null;
+          const yesVotes = p.votes.filter(v => v.vote === 'participate');
+          const noVotes = p.votes.filter(v => v.vote === 'not_participate');
+          const totalVoters = members.length;
+          const totalVoted = p.votes.length;
+          const yesPercent = totalVoters > 0 ? Math.round((yesVotes.length / totalVoters) * 100) : 0;
+          const noPercent = totalVoters > 0 ? Math.round((noVotes.length / totalVoters) * 100) : 0;
+          const canManage = p.created_by === user?.id || isLeader;
+          const deadlineDate = p.deadline ? new Date(p.deadline) : null;
+          const now = new Date();
+          const isExpired = deadlineDate ? deadlineDate < now : false;
+          const diffMs = deadlineDate ? deadlineDate.getTime() - now.getTime() : 0;
+          const diffDays = Math.ceil(diffMs / (1000*60*60*24));
+          const diffHours = Math.ceil(diffMs / (1000*60*60));
+          return (
+            <div key={p.id} className="poll-card">
+              <div className="poll-header">
+                <div className="poll-header-left">
+                  <div className="poll-icon-wrap">{Icons.poll}</div>
+                  <div>
+                    <div className="poll-title">{p.title}</div>
+                    <div className="poll-meta">{p.creatorName} · {totalVoted}/{totalVoters}명 투표</div>
+                  </div>
+                </div>
+                {canManage && (
+                  <div style={{display:'flex',gap:'2px'}}>
+                    <button className="del-btn" title="수정" onClick={() => {
+                      setForm({
+                        editPollId: p.id, pollLocation: p.title,
+                        pollDesc: p.description?.split('\n\n📅')[0] || '',
+                        pollSchedules: [{date:'',time:'오후 3시'}],
+                      });
+                      setModal('editPoll');
+                    }}>{Icons.edit}</button>
+                    <button className="del-btn" onClick={() => handleDeletePoll(p.id)}>✕</button>
+                  </div>
+                )}
+              </div>
+              {p.description && <div className="poll-desc">{p.description}</div>}
+              {deadlineDate && (
+                <div className={`poll-deadline ${isExpired?'expired':''}`}>
+                  {Icons.clock}
+                  <span>{isExpired ? '투표 마감' : diffDays > 0 ? `${diffDays}일 남음` : `${diffHours}시간 남음`}</span>
+                  <span className="poll-deadline-date">{deadlineDate.toLocaleDateString('ko',{month:'long',day:'numeric'})} {deadlineDate.toLocaleTimeString('ko',{hour:'2-digit',minute:'2-digit'})}</span>
+                </div>
+              )}
+              <div className="poll-results">
+                <div className="poll-option">
+                  <div className="poll-option-head">
+                    <span className="poll-option-label">참여</span>
+                    <span className="poll-option-count">{yesVotes.length}명 ({yesPercent}%)</span>
+                  </div>
+                  <div className="poll-bar"><div className="poll-bar-fill yes" style={{width:`${yesPercent}%`}} /></div>
+                  {yesVotes.length > 0 && (
+                    <div className="poll-voters">{yesVotes.map(v => <span key={v.id} className="poll-voter yes">{getName(v.member_id)}</span>)}</div>
+                  )}
+                </div>
+                <div className="poll-option">
+                  <div className="poll-option-head">
+                    <span className="poll-option-label">미참여</span>
+                    <span className="poll-option-count">{noVotes.length}명 ({noPercent}%)</span>
+                  </div>
+                  <div className="poll-bar"><div className="poll-bar-fill no" style={{width:`${noPercent}%`}} /></div>
+                  {noVotes.length > 0 && (
+                    <div className="poll-voters">{noVotes.map(v => <span key={v.id} className="poll-voter no">{getName(v.member_id)}</span>)}</div>
+                  )}
+                </div>
+                {(() => {
+                  const votedIds = new Set(p.votes.map(v => v.member_id));
+                  const notVoted = members.filter(m => !votedIds.has(m.id));
+                  return notVoted.length > 0 ? (
+                    <div className="poll-not-voted">
+                      <span className="poll-not-voted-label">미투표 ({notVoted.length})</span>
+                      <div className="poll-voters">{notVoted.map(m => <span key={m.id} className="poll-voter muted">{m.name}</span>)}</div>
+                    </div>
+                  ) : null;
+                })()}
+              </div>
+              {!isExpired && (
+                <div className="poll-actions">
+                  <button className={`poll-action-btn participate ${uv==='participate'?'active':''}`} onClick={() => handlePollVote(p.id,'participate')}>
+                    {Icons.check} 참여
+                  </button>
+                  <button className={`poll-action-btn not-participate ${uv==='not_participate'?'active':''}`} onClick={() => handlePollVote(p.id,'not_participate')}>
+                    {Icons.x} 미참여
+                  </button>
+                </div>
+              )}
+              {isExpired && <div className="poll-closed">투표가 마감되었습니다</div>}
+              <div className="poll-comments">
+                {p.comments.length > 0 && (
+                  <div className="poll-comments-list">
+                    {p.comments.map(c => (
+                      <div key={c.id} className="poll-comment">
+                        <span className="poll-comment-name">{getName(c.member_id)}</span>
+                        <span className="poll-comment-text">{c.content}</span>
+                        {(c.member_id === user?.id || isLeader) && (
+                          <button className="poll-comment-del" onClick={() => handleDeleteComment(c.id, p.id)}>x</button>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                )}
+                <div className="poll-comment-input">
+                  <input
+                    className="input"
+                    placeholder="의견을 남겨주세요..."
+                    value={commentInput[p.id] || ''}
+                    onChange={e => setCommentInput(prev => ({...prev, [p.id]: e.target.value}))}
+                    onKeyDown={e => e.key === 'Enter' && handleAddComment(p.id)}
+                  />
+                  <button className="poll-comment-send" onClick={() => handleAddComment(p.id)}>{Icons.chat}</button>
+                </div>
+              </div>
+            </div>
+          );
+        })}
 
         {/* 하단 버튼 */}
         <div style={{display:'flex',flexDirection:'column',gap:'6px',marginTop:'12px'}}>
