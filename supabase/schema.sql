@@ -77,6 +77,26 @@ CREATE POLICY "Allow all for meetings" ON meetings FOR ALL USING (true) WITH CHE
 CREATE POLICY "Allow all for discussion_items" ON discussion_items FOR ALL USING (true) WITH CHECK (true);
 CREATE POLICY "Allow all for meeting_records" ON meeting_records FOR ALL USING (true) WITH CHECK (true);
 
+-- 투표 테이블
+CREATE TABLE polls (
+  id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+  title TEXT NOT NULL,
+  description TEXT,
+  created_by UUID NOT NULL REFERENCES members(id) ON DELETE CASCADE,
+  deadline TIMESTAMPTZ,
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- 투표 응답 테이블
+CREATE TABLE poll_votes (
+  id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+  poll_id UUID NOT NULL REFERENCES polls(id) ON DELETE CASCADE,
+  member_id UUID NOT NULL REFERENCES members(id) ON DELETE CASCADE,
+  vote TEXT NOT NULL CHECK (vote IN ('participate', 'not_participate')),
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  UNIQUE(poll_id, member_id)
+);
+
 -- 초기 멤버 시드 데이터
 INSERT INTO members (name, role) VALUES
   ('오영준', 'leader'),

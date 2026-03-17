@@ -71,3 +71,20 @@ export interface MeetingRecord {
   ai_summary: string | null;
   created_at: string;
 }
+
+export interface Poll {
+  id: string;
+  title: string;
+  description: string | null;
+  created_by: string;
+  deadline: string | null;
+  created_at: string;
+}
+
+export interface PollVote {
+  id: string;
+  poll_id: string;
+  member_id: string;
+  vote: 'participate' | 'not_participate';
+  created_at: string;
+}
