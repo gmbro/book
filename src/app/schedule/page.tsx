@@ -555,6 +555,9 @@ export default function SchedulePage() {
         {settingsOpen && (
           <div className="settings-panel">
             <button className="settings-item" onClick={() => { setSettingsOpen(false); setModal('changeBday'); }}>{Icons.settings} 생년월일 변경</button>
+            {isLeader && (
+              <button className="settings-item" onClick={() => { setSettingsOpen(false); setModal('members'); }}>{Icons.users} 모임원 관리</button>
+            )}
           </div>
         )}
 
