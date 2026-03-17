@@ -383,10 +383,9 @@ export default function SchedulePage() {
     if (!user) return;
     if (!form.pollDesc?.trim()) { setConfirmAction({msg:'투표 내용을 입력해주세요.',action:()=>setConfirmAction(null)}); return; }
     if (!form.pollLocation?.trim()) { setConfirmAction({msg:'장소를 입력해주세요.',action:()=>setConfirmAction(null)}); return; }
-    const schedules = (form.pollSchedules || [{date:'',time:'오후 3시'}]) as {date:string;time:string}[];
-    const validSchedules = schedules.filter(s => s.date);
-    if (validSchedules.length === 0) { setConfirmAction({msg:'일정을 입력해주세요.',action:()=>setConfirmAction(null)}); return; }
+    if (!form.pollDate) { setConfirmAction({msg:'일정을 입력해주세요.',action:()=>setConfirmAction(null)}); return; }
     if (!form.pollDeadline) { setConfirmAction({msg:'투표 마감 기한을 입력해주세요.',action:()=>setConfirmAction(null)}); return; }
+    const validSchedules = [{date: form.pollDate, time: form.pollTime || '오후 3시'}];
     const title = form.pollLocation.trim();
     const desc = form.pollDesc.trim();
     // deadline = explicit or last schedule date + 23:59
@@ -792,7 +791,7 @@ export default function SchedulePage() {
 
         {/* 하단 버튼 */}
         <div style={{display:'flex',flexDirection:'column',gap:'6px',marginTop:'12px'}}>
-          <button className="btn btn-accent btn-full" style={{gap:'6px'}} onClick={() => { const t=new Date(); const d=new Date(t); d.setDate(d.getDate()+3); const fmt=(x:Date)=>x.toISOString().slice(0,10); setForm({pollSchedules:[{date:fmt(t),time:'오후 3시'}],pollDeadline:fmt(d)}); setModal('poll'); }}>{Icons.poll} 일정 투표하기</button>
+          <button className="btn btn-accent btn-full" style={{gap:'6px'}} onClick={() => { const t=new Date(); const d=new Date(t); d.setDate(d.getDate()+3); const fmt=(x:Date)=>x.toISOString().slice(0,10); setForm({pollDate:fmt(t),pollTime:'오후 3시',pollDeadline:fmt(d)}); setModal('poll'); }}>{Icons.poll} 일정 투표하기</button>
         </div>
       </div>
 
@@ -879,12 +878,8 @@ export default function SchedulePage() {
           <div className="form-group">
             <label className="form-label">일시</label>
             <div style={{display:'flex',gap:'6px',alignItems:'center'}}>
-              <input className="input" type="date" style={{flex:1}} value={(form.pollSchedules?.[0]?.date)||''} onChange={e => {
-                setForm({...form, pollSchedules: [{date: e.target.value, time: (form.pollSchedules?.[0]?.time)||'오후 3시'}]});
-              }} />
-              <input className="input" style={{width:'100px'}} placeholder="오후 3시" value={(form.pollSchedules?.[0]?.time)||'오후 3시'} onChange={e => {
-                setForm({...form, pollSchedules: [{date: (form.pollSchedules?.[0]?.date)||'', time: e.target.value}]});
-              }} />
+              <input className="input" type="date" style={{flex:1}} value={form.pollDate||''} onChange={e => setForm({...form, pollDate: e.target.value})} />
+              <input className="input" style={{width:'100px'}} placeholder="오후 3시" value={form.pollTime||'오후 3시'} onChange={e => setForm({...form, pollTime: e.target.value})} />
             </div>
           </div>
           <div className="form-group">
