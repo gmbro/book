@@ -374,6 +374,9 @@ export default function SchedulePage() {
                   <button className={`vote-btn ${uv==='available'?'on-yes':''}`} onClick={() => handleVote(p.id,'available')}>{Icons.check} 참여 가능</button>
                   <button className={`vote-btn ${uv==='unavailable'?'on-no':''}`} onClick={() => handleVote(p.id,'unavailable')}>{Icons.x} 불가능</button>
                 </div>
+                {isLeader && (
+                  <button className="btn btn-green btn-full" style={{marginTop:'8px',fontSize:'12px',padding:'8px'}} onClick={() => { setForm({proposal:p.id,dates:p.dates?.join(', ')||''}); setModal('confirm'); }}>확정하기</button>
+                )}
               </div>
             );
           })}
@@ -411,10 +414,9 @@ export default function SchedulePage() {
           </div>
         )}
 
-        {/* 일정 제안/확정 버튼 (최하단) */}
+        {/* 일정 제안 버튼 (최하단) */}
         <div style={{display:'flex',gap:'6px',marginTop:'12px'}}>
           <button className="btn btn-accent btn-full" onClick={() => { setForm({}); setModal('propose'); }}>+ 일정 제안하기</button>
-          <button className="btn btn-green" onClick={() => { setForm({}); setModal('confirm'); }}>확정</button>
         </div>
       </div>
 
