@@ -101,7 +101,7 @@ export default function SchedulePage() {
 
   useEffect(() => {
     // 앱 데이터 버전 — 변경 시 로컬 스토리지 자동 초기화
-    const APP_DATA_VERSION = '4';
+    const APP_DATA_VERSION = '5';
     const storedVer = localStorage.getItem('app_data_version');
     if (storedVer !== APP_DATA_VERSION) {
       const cu = localStorage.getItem('currentUser');
