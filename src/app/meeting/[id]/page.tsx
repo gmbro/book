@@ -315,41 +315,16 @@ export default function MeetingDetailPage({ params }: { params: Promise<{ id: st
                 <button className="btn-danger-sm" style={{fontSize:'10px',padding:'2px 8px'}} onClick={clearRecord}>전체 삭제</button>
               )}
             </div>
-            {/* 인라인 기록 작성 */}
             <textarea
               className="input"
-              style={{minHeight:'120px',marginBottom:'8px',fontSize:'13px',lineHeight:'1.7'}}
+              style={{minHeight:'150px',marginBottom:'8px',fontSize:'13px',lineHeight:'1.7'}}
               placeholder="모임 내용을 자유롭게 기록해주세요..."
               value={recContent}
               onChange={e => setRecContent(e.target.value)}
             />
-            <button className="btn btn-accent btn-full" style={{marginBottom:'10px'}} onClick={() => saveRecord()} disabled={!recContent.trim()}>
+            <button className="btn btn-accent btn-full" onClick={() => saveRecord()} disabled={!recContent.trim()}>
               {record?.content ? '수정 저장' : '기록 저장'}
             </button>
-
-            {/* 녹음 */}
-            <div className="recorder" style={{marginTop:'10px',marginBottom:'10px'}}>
-              <div style={{fontSize:'12px',color:'var(--text-sub)',marginBottom:'8px',display:'flex',alignItems:'center',gap:'6px'}}>{Icons.mic} 음성 녹음</div>
-              <div className="rec-controls">
-                <button className={`rec-btn ${isRec ? 'on' : ''}`} onClick={isRec ? stopRec : startRec}>{isRec ? '⏹' : '●'}</button>
-                <div>
-                  <div className="rec-status">{isRec ? '녹음 중...' : '대기'}</div>
-                  <div className="rec-time">{fmtTime(recTime)}</div>
-                </div>
-              </div>
-              {audioUrl && <audio src={audioUrl} controls style={{width:'100%',marginTop:'8px'}} />}
-            </div>
-
-            {/* AI 요약 */}
-            <div className="ai-box">
-              <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:'6px'}}>
-                <h4>{Icons.star} AI 요약</h4>
-                <button className="btn btn-sm btn-accent" onClick={doSummary} disabled={summaryLoading}>{summaryLoading ? '생성 중...' : '요약 생성'}</button>
-              </div>
-              {record?.ai_summary ? (
-                <div style={{fontSize:'13px',lineHeight:'1.7',color:'var(--text-sub)'}} dangerouslySetInnerHTML={{__html: record.ai_summary.replace(/\n/g, '<br/>')}} />
-              ) : <div style={{fontSize:'12px',color:'var(--text-muted)'}}>기록을 기반으로 AI 요약을 생성하세요</div>}
-            </div>
           </div>
         )}
       </div>
