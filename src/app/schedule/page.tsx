@@ -671,7 +671,7 @@ export default function SchedulePage() {
 
         {/* 하단 버튼 */}
         <div style={{display:'flex',flexDirection:'column',gap:'6px',marginTop:'12px'}}>
-          <button className="btn btn-accent btn-full" style={{gap:'6px'}} onClick={() => { setForm({}); setModal('poll'); }}>{Icons.poll} 투표 만들기</button>
+          <button className="btn btn-accent btn-full" style={{gap:'6px'}} onClick={() => { setForm({}); setModal('poll'); }}>{Icons.poll} 일정 투표하기</button>
           {isLeader && (
             <button className="btn btn-outline btn-full" style={{gap:'6px'}} onClick={() => setModal('members')}>{Icons.users} 모임원 관리</button>
           )}
@@ -749,7 +749,7 @@ export default function SchedulePage() {
       )}
       {modal === 'poll' && (
         <div className="overlay" onClick={() => setModal(null)}><div className="modal" onClick={e => e.stopPropagation()} style={{maxHeight:'85vh',overflow:'auto'}}>
-          <h2>투표 만들기</h2>
+          <h2>일정 투표하기</h2>
           <div className="form-group">
             <label className="form-label">장소 (선택)</label>
             <input className="input" placeholder="예: 강남역 스타벅스" value={form.pollLocation||''} onChange={e => setForm({...form,pollLocation:e.target.value})} />
