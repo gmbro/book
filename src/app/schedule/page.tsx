@@ -18,6 +18,7 @@ const Icons = {
   star: <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>,
   check: <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12"/></svg>,
   x: <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>,
+  share: <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><line x1="8.59" y1="13.51" x2="15.42" y2="17.49"/><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"/></svg>,
 };
 
 interface ProposalWithVotes extends ScheduleProposal { votes: ScheduleVote[]; proposerName: string; }
@@ -450,16 +451,29 @@ export default function SchedulePage() {
     );
   }
 
+  // 미참여자 알림 (링크 공유)
+  const shareReminder = (p: ProposalWithVotes) => {
+    const votedIds = new Set(p.votes.map(v => v.member_id));
+    const notVoted = members.filter(m => !votedIds.has(m.id)).map(m => m.name);
+    const text = `[1+1 독서모임] 투표 참여 부탁드려요!\n\n"${p.title}"\n\n미참여: ${notVoted.join(', ')}\n\n투표하기: ${window.location.origin}/schedule`;
+    if (navigator.share) {
+      navigator.share({ title: '1+1 독서모임 투표', text });
+    } else {
+      navigator.clipboard.writeText(text);
+      alert('알림 내용이 복사되었습니다! 카카오톡에 붙여넣기 해주세요.');
+    }
+  };
+
   /* ===== 메인 원페이지 ===== */
   return (
     <div className="app">
-      <div className="header">
-        <button className="back-btn" onClick={() => router.push('/')}>←</button>
-        <div>
-          <h1>1+1 독서모임</h1>
-          <span className="header-sub">{user?.name}님 환영합니다</span>
+      <div className="header" style={{padding:'10px 16px'}}>
+        <button className="back-btn" style={{width:'30px',height:'30px',fontSize:'14px'}} onClick={() => router.push('/')}>←</button>
+        <div style={{flex:1}}>
+          <h1 style={{fontSize:'15px'}}>1+1 독서모임</h1>
+          <span className="header-sub">{user?.name}님, 반가워요</span>
         </div>
-        <button className="icon-btn" onClick={() => setModal('members')} title="모임원 관리">{Icons.users}</button>
+        <button className="icon-btn" style={{width:'30px',height:'30px'}} onClick={() => setModal('members')} title="모임원 관리">{Icons.users}</button>
       </div>
 
       <div className="content">
@@ -521,6 +535,19 @@ export default function SchedulePage() {
                       {no.map(v => <span key={v.id} className="vote-member-tag no">{getName(v.member_id)}</span>)}
                     </div>
                   )}
+                  {(() => {
+                    const votedIds = new Set(p.votes.map(v => v.member_id));
+                    const notVoted = members.filter(m => !votedIds.has(m.id));
+                    return notVoted.length > 0 ? (
+                      <div className="vote-member-row" style={{alignItems:'center'}}>
+                        <span className="vote-member-label">미참</span>
+                        {notVoted.map(m => <span key={m.id} className="vote-member-tag">{m.name}</span>)}
+                        <button onClick={() => shareReminder(p)} style={{marginLeft:'auto',background:'none',border:'1px solid var(--border)',borderRadius:'6px',padding:'2px 8px',cursor:'pointer',display:'flex',alignItems:'center',gap:'3px',fontSize:'10px',color:'var(--text-sub)',fontFamily:'inherit'}}>
+                          {Icons.share} 알림
+                        </button>
+                      </div>
+                    ) : null;
+                  })()}
                 </div>
                 <div className="vote-btns">
                   <button className={`vote-btn ${uv==='available'?'on-yes':''}`} onClick={() => handleVote(p.id,'available')}>{Icons.check} 참여 가능</button>
