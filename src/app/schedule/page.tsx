@@ -94,7 +94,7 @@ export default function SchedulePage() {
   const [detailTab, setDetailTab] = useState<'book'|'disc'|'rec'>('book');
   const [discussions, setDiscussions] = useState<DiscussionItem[]>([]);
   const [record, setRecord] = useState<MeetingRecord | null>(null);
-  const [currentBook, setCurrentBook] = useState<{title:string|null,author:string|null}>({title:null,author:null});
+  const [showGuide, setShowGuide] = useState(false);
 
   // 모달
   const [modal, setModal] = useState<string | null>(null);
@@ -112,6 +112,11 @@ export default function SchedulePage() {
     if (!u) { router.push('/'); return; }
     setUser(JSON.parse(u));
     init();
+    // 가이드 팔업 (최초 1회)
+    if (!localStorage.getItem('guideShown')) {
+      setShowGuide(true);
+      localStorage.setItem('guideShown', 'true');
+    }
   }, [router]);
 
   useEffect(() => {
@@ -165,13 +170,6 @@ export default function SchedulePage() {
     if (sm) setMeetings(JSON.parse(sm));
     const ml = localStorage.getItem('membersList');
     if (ml) setMembers(JSON.parse(ml));
-    // 모임 상세 데이터 로드 (공유)
-    const cb = localStorage.getItem('currentBook');
-    if (cb) setCurrentBook(JSON.parse(cb));
-    const sd = localStorage.getItem('discussions-shared');
-    if (sd) setDiscussions(JSON.parse(sd));
-    const sr = localStorage.getItem('record-shared');
-    if (sr) setRecord(JSON.parse(sr));
   };
 
   const saveProposals = useCallback((p: ProposalWithVotes[]) => { if (useLocal) localStorage.setItem('proposals', JSON.stringify(p)); }, [useLocal]);
@@ -270,37 +268,31 @@ export default function SchedulePage() {
   };
 
   const saveBook = async () => {
-    const book = {title: form.bookTitle || null, author: form.bookAuthor || null};
-    setCurrentBook(book);
-    if (useLocal) localStorage.setItem('currentBook', JSON.stringify(book));
-    if (selectedMeeting) {
-      const up = { ...selectedMeeting, book_title: book.title, book_author: book.author };
-      setSelectedMeeting(up);
-      if (useLocal) { const um = meetings.map(m => m.id === up.id ? up : m); setMeetings(um); saveMeetings(um); }
-      else { await supabase.from('meetings').update({ book_title: book.title, book_author: book.author }).eq('id', up.id); }
-    }
+    if (!selectedMeeting) return;
+    const up = { ...selectedMeeting, book_title: form.bookTitle || null, book_author: form.bookAuthor || null };
+    setSelectedMeeting(up);
+    if (useLocal) {
+      const um = meetings.map(m => m.id === up.id ? up : m); setMeetings(um); saveMeetings(um);
+    } else { await supabase.from('meetings').update({ book_title: form.bookTitle, book_author: form.bookAuthor }).eq('id', up.id); }
     setModal(null);
   };
 
   const addDiscussion = async () => {
-    if (!user || !form.discContent) return;
-    const mid = selectedMeeting?.id || 'shared';
-    const item: DiscussionItem = { id: `d-${Date.now()}`, meeting_id: mid, author_id: user.id, type: (form.discType as 'topic'|'question') || 'topic', content: form.discContent, created_at: '' };
+    if (!user || !form.discContent || !selectedMeeting) return;
+    const item: DiscussionItem = { id: `d-${Date.now()}`, meeting_id: selectedMeeting.id, author_id: user.id, type: (form.discType as 'topic'|'question') || 'topic', content: form.discContent, created_at: '' };
     const ud = [...discussions, item]; setDiscussions(ud);
-    if (useLocal) localStorage.setItem(`discussions-${mid}`, JSON.stringify(ud));
-    else if (selectedMeeting) await supabase.from('discussion_items').insert({ meeting_id: selectedMeeting.id, author_id: user.id, type: form.discType || 'topic', content: form.discContent });
+    if (useLocal) localStorage.setItem(`discussions-${selectedMeeting.id}`, JSON.stringify(ud));
+    else await supabase.from('discussion_items').insert({ meeting_id: selectedMeeting.id, author_id: user.id, type: form.discType || 'topic', content: form.discContent });
     setForm({}); setModal(null);
   };
 
   const saveRecord = async () => {
-    const mid = selectedMeeting?.id || 'shared';
-    const r: MeetingRecord = { id: record?.id || `r-${Date.now()}`, meeting_id: mid, content: form.recContent || null, audio_url: audioUrl, ai_summary: record?.ai_summary || null, created_at: '' };
+    if (!selectedMeeting) return;
+    const r: MeetingRecord = { id: record?.id || `r-${Date.now()}`, meeting_id: selectedMeeting.id, content: form.recContent || null, audio_url: audioUrl, ai_summary: record?.ai_summary || null, created_at: '' };
     setRecord(r);
-    if (useLocal) localStorage.setItem(`record-${mid}`, JSON.stringify(r));
-    else if (selectedMeeting) {
-      if (record?.id) await supabase.from('meeting_records').update({ content: form.recContent }).eq('id', record.id);
-      else await supabase.from('meeting_records').insert({ meeting_id: selectedMeeting.id, content: form.recContent, audio_url: audioUrl });
-    }
+    if (useLocal) localStorage.setItem(`record-${selectedMeeting.id}`, JSON.stringify(r));
+    else if (record?.id) await supabase.from('meeting_records').update({ content: form.recContent }).eq('id', record.id);
+    else await supabase.from('meeting_records').insert({ meeting_id: selectedMeeting.id, content: form.recContent, audio_url: audioUrl });
     setModal(null);
   };
 
@@ -354,139 +346,6 @@ export default function SchedulePage() {
 
   const proposedDates = proposals.flatMap(p => p.dates || []);
   const confirmedDates = meetings.map(m => m.date).filter(Boolean) as string[];
-
-  /* ===== 모임 상세 뷰 (인라인) ===== */
-  if (selectedMeeting) {
-    const m = selectedMeeting;
-    return (
-      <div className="app">
-        <div className="header">
-          <button className="back-btn" onClick={() => setSelectedMeeting(null)}>←</button>
-          <div>
-            <h1>모임 상세</h1>
-            <span className="header-sub">
-              {m.date ? new Date(m.date+'T00:00:00').toLocaleDateString('ko',{year:'numeric',month:'long',day:'numeric',weekday:'short'}) : '미정'}
-            </span>
-          </div>
-          <span className={`badge ${m.status === 'confirmed' ? 'badge-green' : 'badge-orange'}`}>
-            {m.status === 'confirmed' ? '확정' : '완료'}
-          </span>
-        </div>
-        <div className="content">
-          {/* 기본 정보 */}
-          <div className="section">
-            <div style={{fontSize:'12px',color:'var(--text-muted)',marginBottom:'3px'}}>일시</div>
-            <div style={{fontSize:'14px'}}>
-              {m.date ? new Date(m.date+'T00:00:00').toLocaleDateString('ko',{year:'numeric',month:'long',day:'numeric',weekday:'short'}) : '미정'} {m.time||''}
-            </div>
-          </div>
-
-          {/* 탭 */}
-          <div className="tabs">
-            <button className={`tab ${detailTab==='book'?'on':''}`} onClick={() => setDetailTab('book')}>도서</button>
-            <button className={`tab ${detailTab==='disc'?'on':''}`} onClick={() => setDetailTab('disc')}>발제문</button>
-            <button className={`tab ${detailTab==='rec'?'on':''}`} onClick={() => setDetailTab('rec')}>기록</button>
-          </div>
-
-          {detailTab === 'book' && (
-            <div className="section">
-              <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:'10px'}}>
-                <div className="section-title">{Icons.book} 선정 도서</div>
-                <button className="btn btn-sm btn-outline" onClick={() => { setForm({bookTitle:m.book_title||'',bookAuthor:m.book_author||''}); setModal('book'); }}>
-                  {m.book_title ? '수정' : '선정하기'}
-                </button>
-              </div>
-              {m.book_title ? (
-                <div className="book-box">
-                  <div style={{fontSize:'14px',marginBottom:'2px'}}>{m.book_title}</div>
-                  <div style={{fontSize:'12px',color:'var(--text-muted)'}}>{m.book_author||'저자 미상'}</div>
-                </div>
-              ) : <div className="empty">아직 도서가 선정되지 않았습니다</div>}
-            </div>
-          )}
-
-          {detailTab === 'disc' && (
-            <div className="section">
-              <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:'10px'}}>
-                <div className="section-title">{Icons.chat} 발제문 · 질문</div>
-                <button className="btn btn-sm btn-outline" onClick={() => { setForm({discType:'topic',discContent:''}); setModal('disc'); }}>+ 추가</button>
-              </div>
-              {discussions.length > 0 ? discussions.map(d => (
-                <div key={d.id} className="disc-item">
-                  <div className={`disc-type ${d.type}`}>{d.type==='topic'?'발제문':'질문'}</div>
-                  <div className="disc-content">{d.content}</div>
-                  <div className="disc-meta">{getName(d.author_id)}</div>
-                </div>
-              )) : <div className="empty">아직 발제문이 없습니다</div>}
-            </div>
-          )}
-
-          {detailTab === 'rec' && (
-            <div className="section">
-              <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:'10px'}}>
-                <div className="section-title">{Icons.edit} 모임 기록</div>
-                <button className="btn btn-sm btn-outline" onClick={() => { setForm({recContent:record?.content||''}); setModal('rec'); }}>
-                  {record?.content ? '수정' : '기록하기'}
-                </button>
-              </div>
-              {record?.content ? <div className="section" style={{margin:0}}><p style={{fontSize:'13px',lineHeight:'1.7',whiteSpace:'pre-wrap'}}>{record.content}</p></div> : <div className="empty" style={{marginBottom:'10px'}}>아직 기록이 없습니다</div>}
-
-              {/* 녹음 */}
-              <div className="recorder" style={{marginTop:'10px',marginBottom:'10px'}}>
-                <div style={{fontSize:'12px',color:'var(--text-sub)',marginBottom:'8px',display:'flex',alignItems:'center',gap:'6px'}}>{Icons.mic} 음성 녹음</div>
-                <div className="rec-controls">
-                  <button className={`rec-btn ${isRec?'on':''}`} onClick={isRec ? stopRec : startRec}>{isRec ? '⏹' : '●'}</button>
-                  <div>
-                    <div className="rec-status">{isRec ? '녹음 중...' : '대기'}</div>
-                    <div className="rec-time">{fmtTime(recTime)}</div>
-                  </div>
-                </div>
-                {audioUrl && <audio src={audioUrl} controls style={{width:'100%',marginTop:'8px'}} />}
-              </div>
-
-              {/* AI 요약 */}
-              <div className="ai-box">
-                <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:'6px'}}>
-                  <h4>{Icons.star} AI 요약</h4>
-                  <button className="btn btn-sm btn-accent" onClick={doSummary} disabled={summaryLoading}>{summaryLoading ? '생성 중...' : '요약 생성'}</button>
-                </div>
-                {record?.ai_summary ? (
-                  <div style={{fontSize:'13px',lineHeight:'1.7',color:'var(--text-sub)'}} dangerouslySetInnerHTML={{__html: record.ai_summary.replace(/\n/g,'<br/>')}} />
-                ) : <div style={{fontSize:'12px',color:'var(--text-muted)'}}>기록을 기반으로 AI 요약을 생성하세요</div>}
-              </div>
-            </div>
-          )}
-        </div>
-
-        {/* 모달들 */}
-        {modal === 'book' && (
-          <div className="overlay" onClick={() => setModal(null)}><div className="modal" onClick={e => e.stopPropagation()}>
-            <h2>도서 선정</h2>
-            <div className="form-group"><label className="form-label">도서 제목</label><input className="input" value={form.bookTitle||''} onChange={e => setForm({...form,bookTitle:e.target.value})} /></div>
-            <div className="form-group"><label className="form-label">저자</label><input className="input" value={form.bookAuthor||''} onChange={e => setForm({...form,bookAuthor:e.target.value})} /></div>
-            <div className="modal-btns"><button className="btn btn-outline" style={{flex:1}} onClick={() => setModal(null)}>취소</button><button className="btn btn-accent" style={{flex:1}} onClick={saveBook}>저장</button></div>
-          </div></div>
-        )}
-        {modal === 'disc' && (
-          <div className="overlay" onClick={() => setModal(null)}><div className="modal" onClick={e => e.stopPropagation()}>
-            <h2>발제문 · 질문 추가</h2>
-            <div className="form-group"><label className="form-label">유형</label>
-              <select className="input" value={form.discType||'topic'} onChange={e => setForm({...form,discType:e.target.value})}><option value="topic">발제문</option><option value="question">질문</option></select>
-            </div>
-            <div className="form-group"><label className="form-label">내용</label><textarea className="input" value={form.discContent||''} onChange={e => setForm({...form,discContent:e.target.value})} /></div>
-            <div className="modal-btns"><button className="btn btn-outline" style={{flex:1}} onClick={() => setModal(null)}>취소</button><button className="btn btn-accent" style={{flex:1}} onClick={addDiscussion}>추가</button></div>
-          </div></div>
-        )}
-        {modal === 'rec' && (
-          <div className="overlay" onClick={() => setModal(null)}><div className="modal" onClick={e => e.stopPropagation()}>
-            <h2>모임 기록</h2>
-            <div className="form-group"><label className="form-label">기록 내용</label><textarea className="input" style={{minHeight:'160px'}} value={form.recContent||''} onChange={e => setForm({...form,recContent:e.target.value})} /></div>
-            <div className="modal-btns"><button className="btn btn-outline" style={{flex:1}} onClick={() => setModal(null)}>취소</button><button className="btn btn-accent" style={{flex:1}} onClick={saveRecord}>저장</button></div>
-          </div></div>
-        )}
-      </div>
-    );
-  }
 
   // 미참여자 알림 (링크 공유)
   const shareReminder = (p: ProposalWithVotes) => {
@@ -616,81 +475,87 @@ export default function SchedulePage() {
 
         </div>
 
-        {/* ===== 모임 상세 (항상 표시) ===== */}
-        <div className="section">
-          <div className="tabs">
-            <button className={`tab ${detailTab==='book'?'on':''}`} onClick={() => setDetailTab('book')}>도서</button>
-            <button className={`tab ${detailTab==='disc'?'on':''}`} onClick={() => setDetailTab('disc')}>발제문</button>
-            <button className={`tab ${detailTab==='rec'?'on':''}`} onClick={() => setDetailTab('rec')}>기록</button>
-          </div>
+        {/* ===== 모임 상세 (달력에서 확정일 클릭 시) ===== */}
+        {selectedMeeting && (
+          <div className="section" style={{border:'2px solid var(--green)',position:'relative'}}>
+            <button onClick={() => setSelectedMeeting(null)} style={{position:'absolute',top:'10px',right:'12px',background:'none',border:'none',fontSize:'16px',cursor:'pointer',color:'var(--text-muted)'}}>✕</button>
+            <div style={{fontSize:'13px',color:'var(--green)',marginBottom:'8px',fontWeight:600}}>
+              {selectedMeeting.date ? new Date(selectedMeeting.date+'T00:00:00').toLocaleDateString('ko',{year:'numeric',month:'long',day:'numeric',weekday:'short'}) : ''} {selectedMeeting.time||''}
+            </div>
+            <div className="tabs">
+              <button className={`tab ${detailTab==='book'?'on':''}`} onClick={() => setDetailTab('book')}>도서</button>
+              <button className={`tab ${detailTab==='disc'?'on':''}`} onClick={() => setDetailTab('disc')}>발제문</button>
+              <button className={`tab ${detailTab==='rec'?'on':''}`} onClick={() => setDetailTab('rec')}>기록</button>
+            </div>
 
-          {detailTab === 'book' && (
-            <>
-              <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:'10px'}}>
-                <div className="section-title" style={{marginBottom:0}}>{Icons.book} 선정 도서</div>
-                <button className="btn btn-sm btn-outline" onClick={() => { setForm({bookTitle:currentBook.title||'',bookAuthor:currentBook.author||''}); setModal('book'); }}>
-                  {currentBook.title ? '수정' : '선정하기'}
-                </button>
-              </div>
-              {currentBook.title ? (
-                <div className="book-box">
-                  <div style={{fontSize:'14px',marginBottom:'2px'}}>{currentBook.title}</div>
-                  <div style={{fontSize:'12px',color:'var(--text-muted)'}}>{currentBook.author||'저자 미상'}</div>
+            {detailTab === 'book' && (
+              <>
+                <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:'10px'}}>
+                  <div className="section-title" style={{marginBottom:0}}>{Icons.book} 선정 도서</div>
+                  <button className="btn btn-sm btn-outline" onClick={() => { setForm({bookTitle:selectedMeeting.book_title||'',bookAuthor:selectedMeeting.book_author||''}); setModal('book'); }}>
+                    {selectedMeeting.book_title ? '수정' : '선정하기'}
+                  </button>
                 </div>
-              ) : <div className="empty">아직 도서가 선정되지 않았습니다</div>}
-            </>
-          )}
-
-          {detailTab === 'disc' && (
-            <>
-              <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:'10px'}}>
-                <div className="section-title" style={{marginBottom:0}}>{Icons.chat} 발제문 · 질문</div>
-                <button className="btn btn-sm btn-outline" onClick={() => { setForm({discType:'topic',discContent:''}); setModal('disc'); }}>+ 추가</button>
-              </div>
-              {discussions.length > 0 ? discussions.map(d => (
-                <div key={d.id} className="disc-item">
-                  <div className={`disc-type ${d.type}`}>{d.type==='topic'?'발제문':'질문'}</div>
-                  <div className="disc-content">{d.content}</div>
-                  <div className="disc-meta">{getName(d.author_id)}</div>
-                </div>
-              )) : <div className="empty">아직 발제문이 없습니다</div>}
-            </>
-          )}
-
-          {detailTab === 'rec' && (
-            <>
-              <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:'10px'}}>
-                <div className="section-title" style={{marginBottom:0}}>{Icons.edit} 모임 기록</div>
-                <button className="btn btn-sm btn-outline" onClick={() => { setForm({recContent:record?.content||''}); setModal('rec'); }}>
-                  {record?.content ? '수정' : '기록하기'}
-                </button>
-              </div>
-              {record?.content ? <div style={{fontSize:'13px',lineHeight:'1.7',whiteSpace:'pre-wrap',padding:'10px',background:'var(--bg-input)',borderRadius:'var(--r-sm)',border:'1px solid var(--border)'}}>{record.content}</div> : <div className="empty" style={{marginBottom:'10px'}}>아직 기록이 없습니다</div>}
-
-              <div className="recorder" style={{marginTop:'10px',marginBottom:'10px'}}>
-                <div style={{fontSize:'12px',color:'var(--text-sub)',marginBottom:'8px',display:'flex',alignItems:'center',gap:'6px'}}>{Icons.mic} 음성 녹음</div>
-                <div className="rec-controls">
-                  <button className={`rec-btn ${isRec?'on':''}`} onClick={isRec ? stopRec : startRec}>{isRec ? '⏹' : '●'}</button>
-                  <div>
-                    <div className="rec-status">{isRec ? '녹음 중...' : '대기'}</div>
-                    <div className="rec-time">{fmtTime(recTime)}</div>
+                {selectedMeeting.book_title ? (
+                  <div className="book-box">
+                    <div style={{fontSize:'14px',marginBottom:'2px'}}>{selectedMeeting.book_title}</div>
+                    <div style={{fontSize:'12px',color:'var(--text-muted)'}}>{selectedMeeting.book_author||'저자 미상'}</div>
                   </div>
-                </div>
-                {audioUrl && <audio src={audioUrl} controls style={{width:'100%',marginTop:'8px'}} />}
-              </div>
+                ) : <div className="empty">아직 도서가 선정되지 않았습니다</div>}
+              </>
+            )}
 
-              <div className="ai-box">
-                <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:'6px'}}>
-                  <h4>{Icons.star} AI 요약</h4>
-                  <button className="btn btn-sm btn-accent" onClick={doSummary} disabled={summaryLoading}>{summaryLoading ? '생성 중...' : '요약 생성'}</button>
+            {detailTab === 'disc' && (
+              <>
+                <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:'10px'}}>
+                  <div className="section-title" style={{marginBottom:0}}>{Icons.chat} 발제문 · 질문</div>
+                  <button className="btn btn-sm btn-outline" onClick={() => { setForm({discType:'topic',discContent:''}); setModal('disc'); }}>+ 추가</button>
                 </div>
-                {record?.ai_summary ? (
-                  <div style={{fontSize:'13px',lineHeight:'1.7',color:'var(--text-sub)'}} dangerouslySetInnerHTML={{__html: record.ai_summary.replace(/\n/g,'<br/>')}} />
-                ) : <div style={{fontSize:'12px',color:'var(--text-muted)'}}>기록을 기반으로 AI 요약을 생성하세요</div>}
-              </div>
-            </>
-          )}
-        </div>
+                {discussions.length > 0 ? discussions.map(d => (
+                  <div key={d.id} className="disc-item">
+                    <div className={`disc-type ${d.type}`}>{d.type==='topic'?'발제문':'질문'}</div>
+                    <div className="disc-content">{d.content}</div>
+                    <div className="disc-meta">{getName(d.author_id)}</div>
+                  </div>
+                )) : <div className="empty">아직 발제문이 없습니다</div>}
+              </>
+            )}
+
+            {detailTab === 'rec' && (
+              <>
+                <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:'10px'}}>
+                  <div className="section-title" style={{marginBottom:0}}>{Icons.edit} 모임 기록</div>
+                  <button className="btn btn-sm btn-outline" onClick={() => { setForm({recContent:record?.content||''}); setModal('rec'); }}>
+                    {record?.content ? '수정' : '기록하기'}
+                  </button>
+                </div>
+                {record?.content ? <div style={{fontSize:'13px',lineHeight:'1.7',whiteSpace:'pre-wrap',padding:'10px',background:'var(--bg-input)',borderRadius:'var(--r-sm)',border:'1px solid var(--border)'}}>{record.content}</div> : <div className="empty" style={{marginBottom:'10px'}}>아직 기록이 없습니다</div>}
+
+                <div className="recorder" style={{marginTop:'10px',marginBottom:'10px'}}>
+                  <div style={{fontSize:'12px',color:'var(--text-sub)',marginBottom:'8px',display:'flex',alignItems:'center',gap:'6px'}}>{Icons.mic} 음성 녹음</div>
+                  <div className="rec-controls">
+                    <button className={`rec-btn ${isRec?'on':''}`} onClick={isRec ? stopRec : startRec}>{isRec ? '⏹' : '●'}</button>
+                    <div>
+                      <div className="rec-status">{isRec ? '녹음 중...' : '대기'}</div>
+                      <div className="rec-time">{fmtTime(recTime)}</div>
+                    </div>
+                  </div>
+                  {audioUrl && <audio src={audioUrl} controls style={{width:'100%',marginTop:'8px'}} />}
+                </div>
+
+                <div className="ai-box">
+                  <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:'6px'}}>
+                    <h4>{Icons.star} AI 요약</h4>
+                    <button className="btn btn-sm btn-accent" onClick={doSummary} disabled={summaryLoading}>{summaryLoading ? '생성 중...' : '요약 생성'}</button>
+                  </div>
+                  {record?.ai_summary ? (
+                    <div style={{fontSize:'13px',lineHeight:'1.7',color:'var(--text-sub)'}} dangerouslySetInnerHTML={{__html: record.ai_summary.replace(/\n/g,'<br/>')}} />
+                  ) : <div style={{fontSize:'12px',color:'var(--text-muted)'}}>기록을 기반으로 AI 요약을 생성하세요</div>}
+                </div>
+              </>
+            )}
+          </div>
+        )}
       </div>
 
       {/* ===== 모달들 ===== */}
@@ -736,6 +601,20 @@ export default function SchedulePage() {
             </div>
           )}
           <div className="modal-btns"><button className="btn btn-outline btn-full" onClick={() => setModal(null)}>닫기</button></div>
+        </div></div>
+      )}
+      {showGuide && (
+        <div className="overlay" onClick={() => setShowGuide(false)}><div className="modal" onClick={e => e.stopPropagation()}>
+          <h2>1+1 독서모임 사용 가이드</h2>
+          <div style={{fontSize:'13px',lineHeight:'1.8',color:'var(--text-sub)'}}>
+            <p><b>1. 일정 투표</b> — 제안된 일정에 참여 가능/불가능을 투표해요</p>
+            <p><b>2. 일정 확정</b> — 투표 결과를 보고 상단 "확정" 버튼으로 날짜를 확정해요</p>
+            <p><b>3. 모임 상세</b> — 달력에서 <span style={{color:'var(--green)',fontWeight:600}}>초록색 날짜</span>를 클릭하면 모임 상세가 열려요</p>
+            <p style={{paddingLeft:'16px'}}>• 도서 선정, 발제문 작성, 모임 기록, AI 요약</p>
+            <p><b>4. 미참여 알림</b> — 투표하지 않은 사람에게 알림을 보낼 수 있어요</p>
+            <p><b>5. 반복</b> — 확정 후 다음 모임을 바로 제안할 수 있어요</p>
+          </div>
+          <div className="modal-btns"><button className="btn btn-accent btn-full" onClick={() => setShowGuide(false)}>확인</button></div>
         </div></div>
       )}
     </div>
