@@ -118,7 +118,7 @@ export default function SchedulePage() {
     }
 
     const u = localStorage.getItem('currentUser');
-    if (!u) { router.push('/',action:()=>setConfirmAction(null)}); return; }
+    if (!u) { router.push('/'); return; }
     setUser(JSON.parse(u));
     init();
   }, [router]);
