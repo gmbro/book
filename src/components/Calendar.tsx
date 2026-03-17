@@ -7,9 +7,10 @@ const DAYS = ['일', '월', '화', '수', '목', '금', '토'];
 interface CalendarProps {
   proposedDates?: string[];
   confirmedDates?: string[];
+  onDateClick?: (date: string) => void;
 }
 
-export default function Calendar({ proposedDates = [], confirmedDates = [] }: CalendarProps) {
+export default function Calendar({ proposedDates = [], confirmedDates = [], onDateClick }: CalendarProps) {
   const [cur, setCur] = useState(new Date());
   const y = cur.getFullYear(), m = cur.getMonth();
   const first = new Date(y, m, 1).getDay();
@@ -44,12 +45,18 @@ export default function Calendar({ proposedDates = [], confirmedDates = [] }: Ca
           const isToday = c.str === todayStr;
           const hasProp = proposedDates.includes(c.str);
           const hasConf = confirmedDates.includes(c.str);
+          const clickable = hasConf && onDateClick;
           return (
-            <div key={i} className={`cal-day ${c.other ? 'other' : ''} ${isToday ? 'today' : ''}`}>
+            <div
+              key={i}
+              className={`cal-day ${c.other ? 'other' : ''} ${isToday ? 'today' : ''} ${hasConf ? 'confirmed-day' : ''}`}
+              onClick={() => clickable && onDateClick(c.str)}
+              style={clickable ? {cursor:'pointer'} : undefined}
+            >
               {c.d}
               {(hasProp || hasConf) && (
                 <div className="cal-dots">
-                  {hasProp && <span className="cal-dot" />}
+                  {hasProp && !hasConf && <span className="cal-dot" />}
                   {hasConf && <span className="cal-dot confirmed" />}
                 </div>
               )}

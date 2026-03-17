@@ -21,7 +21,7 @@ const Icons = {
   share: <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><line x1="8.59" y1="13.51" x2="15.42" y2="17.49"/><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"/></svg>,
 };
 
-interface ProposalWithVotes extends ScheduleProposal { votes: ScheduleVote[]; proposerName: string; }
+interface ProposalWithVotes extends ScheduleProposal { votes: ScheduleVote[]; proposerName: string; deadline?: string; }
 
 const MEMBERS_DEFAULT: Member[] = [
   { id: 'local-0', name: '오영준', role: 'leader', created_at: '' },
@@ -37,9 +37,9 @@ const MEMBERS_DEFAULT: Member[] = [
 ];
 
 const INITIAL_PROPOSALS = [
-  { title: '1안 : 5월 ~ 8월 매월 첫번째 토요일 오후 3시', desc: '이 일정 모두 가능하시면 참여 가능, 하나라도 안 되면 불가능을 눌러주세요!', dates: ['2026-05-02','2026-06-06','2026-07-04','2026-08-01'] },
-  { title: '2안 : 5월 ~ 8월 매월 첫번째 일요일 오후 3시', desc: '이 일정 모두 가능하시면 참여 가능, 하나라도 안 되면 불가능을 눌러주세요!', dates: ['2026-05-03','2026-06-07','2026-07-05','2026-08-02'] },
-  { title: '3안 : 5월 ~ 8월 매월 두번째 토요일 오후 3시', desc: '이 일정 모두 가능하시면 참여 가능, 하나라도 안 되면 불가능을 눌러주세요!', dates: ['2026-05-09','2026-06-13','2026-07-11','2026-08-08'] },
+  { title: '1안 : 5월 ~ 8월 매월 첫번째 토요일 오후 3시', desc: '이 일정 모두 가능하시면 참여 가능, 하나라도 안 되면 불가능을 눌러주세요!', dates: ['2026-05-02','2026-06-06','2026-07-04','2026-08-01'], deadline: '2026-03-22' },
+  { title: '2안 : 5월 ~ 8월 매월 첫번째 일요일 오후 3시', desc: '이 일정 모두 가능하시면 참여 가능, 하나라도 안 되면 불가능을 눌러주세요!', dates: ['2026-05-03','2026-06-07','2026-07-05','2026-08-02'], deadline: '2026-03-22' },
+  { title: '3안 : 5월 ~ 8월 매월 두번째 토요일 오후 3시', desc: '이 일정 모두 가능하시면 참여 가능, 하나라도 안 되면 불가능을 눌러주세요!', dates: ['2026-05-09','2026-06-13','2026-07-11','2026-08-08'], deadline: '2026-03-22' },
 ];
 
 // 실제 투표 데이터: 이름 → member id 매핑
@@ -52,7 +52,7 @@ function buildInitialProposals(): ProposalWithVotes[] {
   return [
     {
       id: 'proposal-0', title: INITIAL_PROPOSALS[0].title, description: INITIAL_PROPOSALS[0].desc,
-      proposed_by: 'local-0', dates: INITIAL_PROPOSALS[0].dates, created_at: '', proposerName: '오영준',
+      proposed_by: 'local-0', dates: INITIAL_PROPOSALS[0].dates, created_at: '', proposerName: '오영준', deadline: '2026-03-22',
       votes: [
         mkVote('proposal-0','이경민','available'), mkVote('proposal-0','강다영','available'),
         mkVote('proposal-0','김지원','available'), mkVote('proposal-0','배성진','available'),
@@ -62,7 +62,7 @@ function buildInitialProposals(): ProposalWithVotes[] {
     },
     {
       id: 'proposal-1', title: INITIAL_PROPOSALS[1].title, description: INITIAL_PROPOSALS[1].desc,
-      proposed_by: 'local-0', dates: INITIAL_PROPOSALS[1].dates, created_at: '', proposerName: '오영준',
+      proposed_by: 'local-0', dates: INITIAL_PROPOSALS[1].dates, created_at: '', proposerName: '오영준', deadline: '2026-03-22',
       votes: [
         mkVote('proposal-1','송의선','available'), mkVote('proposal-1','오영준','available'),
         mkVote('proposal-1','이장민','available'), mkVote('proposal-1','한태원','available'),
@@ -71,7 +71,7 @@ function buildInitialProposals(): ProposalWithVotes[] {
     },
     {
       id: 'proposal-2', title: INITIAL_PROPOSALS[2].title, description: INITIAL_PROPOSALS[2].desc,
-      proposed_by: 'local-0', dates: INITIAL_PROPOSALS[2].dates, created_at: '', proposerName: '오영준',
+      proposed_by: 'local-0', dates: INITIAL_PROPOSALS[2].dates, created_at: '', proposerName: '오영준', deadline: '2026-03-22',
       votes: [
         mkVote('proposal-2','이경민','available'), mkVote('proposal-2','배성진','available'),
         mkVote('proposal-2','이장민','available'), mkVote('proposal-2','한태원','available'),
@@ -214,7 +214,7 @@ export default function SchedulePage() {
     if (!user || !form.title) return;
     const dates = form.dates ? form.dates.split(',').map(d => d.trim()).filter(Boolean) : [];
     if (useLocal) {
-      const np: ProposalWithVotes = { id: `p-${Date.now()}`, title: form.title, description: form.desc || null, proposed_by: user.id, dates, created_at: '', votes: [], proposerName: user.name };
+      const np: ProposalWithVotes = { id: `p-${Date.now()}`, title: form.title, description: form.desc || null, proposed_by: user.id, dates, created_at: '', votes: [], proposerName: user.name, deadline: form.deadline || undefined };
       const up = [...proposals, np]; setProposals(up); saveProposals(up);
     } else {
       await supabase.from('schedule_proposals').insert({ title: form.title, description: form.desc, proposed_by: user.id, dates }); init();
@@ -229,6 +229,28 @@ export default function SchedulePage() {
     if (useLocal) { const um = [...meetings, m]; setMeetings(um); saveMeetings(um); }
     else { await supabase.from('meetings').insert({ date: form.date, time: form.time || '오후 3시', status: 'confirmed', proposal_id: form.proposal }); init(); }
     setForm({}); setModal(null);
+    // 자동 다음 모임 제안
+    setTimeout(() => {
+      if (confirm('다음 모임 일정도 제안하시겠습니까?')) {
+        setForm({}); setModal('propose');
+      }
+    }, 500);
+  };
+
+  const handleCompleteMeeting = async (mid: string) => {
+    if (!confirm('이 모임을 완료 처리하시겠습니까?')) return;
+    if (useLocal) {
+      const um = meetings.map(m => m.id === mid ? { ...m, status: 'completed' as const } : m);
+      setMeetings(um); saveMeetings(um);
+    } else {
+      await supabase.from('meetings').update({ status: 'completed' }).eq('id', mid); init();
+    }
+  };
+
+  // 달력에서 확정된 날짜 클릭
+  const handleCalendarDateClick = (dateStr: string) => {
+    const m = meetings.find(mt => mt.date === dateStr);
+    if (m) openMeeting(m);
   };
 
   // ===== 모임 상세 =====
@@ -499,7 +521,7 @@ export default function SchedulePage() {
         </div>
 
         {/* 달력 */}
-        <Calendar proposedDates={proposedDates} confirmedDates={confirmedDates} />
+        <Calendar proposedDates={proposedDates} confirmedDates={confirmedDates} onDateClick={handleCalendarDateClick} />
 
         {/* 확정된 모임 */}
         {meetings.length > 0 && (
@@ -515,7 +537,12 @@ export default function SchedulePage() {
                   <h4>{m.date ? new Date(m.date+'T00:00:00').toLocaleDateString('ko',{month:'long',day:'numeric',weekday:'short'}) : '미정'}</h4>
                   <p>{m.time||'시간 미정'} · {m.book_title||'도서 미선정'}</p>
                 </div>
-                <span style={{color:'var(--text-muted)'}}>›</span>
+                <div style={{display:'flex',alignItems:'center',gap:'6px'}}>
+                  <span className={`badge ${m.status==='completed'?'badge-completed':'badge-green'}`}>{m.status==='completed'?'완료':'확정'}</span>
+                  {m.status==='confirmed' && (
+                    <button className="btn-danger-sm" style={{fontSize:'10px',padding:'2px 6px'}} onClick={(e) => { e.stopPropagation(); handleCompleteMeeting(m.id); }}>완료</button>
+                  )}
+                </div>
               </div>
             ))}
           </div>
@@ -538,6 +565,15 @@ export default function SchedulePage() {
                   {p.proposed_by === user?.id && <button className="del-btn" onClick={() => handleDeleteProposal(p.id)}>✕</button>}
                 </div>
                 {p.description && <div className="vote-desc">{p.description}</div>}
+                {p.deadline && (() => {
+                  const now = new Date(); const dl = new Date(p.deadline+'T23:59:59');
+                  const diff = Math.ceil((dl.getTime()-now.getTime())/(1000*60*60*24));
+                  const expired = diff < 0;
+                  return <div className={`deadline-bar ${expired?'expired':''}`}>
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+                    {expired ? '마감됨' : `마감 ${diff}일 남음 (${p.deadline})`}
+                  </div>;
+                })()}
                 <div className="vote-counts">
                   <span className="vote-count yes">{Icons.check} {yes.length}</span>
                   <span className="vote-count no">{Icons.x} {no.length}</span>
@@ -664,6 +700,7 @@ export default function SchedulePage() {
           <div className="form-group"><label className="form-label">제안 제목</label><input className="input" placeholder="예: 5월~8월 매월 첫째 토요일" value={form.title||''} onChange={e => setForm({...form,title:e.target.value})} /></div>
           <div className="form-group"><label className="form-label">설명</label><textarea className="input" placeholder="설명" value={form.desc||''} onChange={e => setForm({...form,desc:e.target.value})} /></div>
           <div className="form-group"><label className="form-label">날짜 (YYYY-MM-DD, 쉼표 구분)</label><input className="input" placeholder="예: 2026-05-02, 2026-06-06" value={form.dates||''} onChange={e => setForm({...form,dates:e.target.value})} /></div>
+          <div className="form-group"><label className="form-label">투표 마감일</label><input className="input" type="date" value={form.deadline||''} onChange={e => setForm({...form,deadline:e.target.value})} /></div>
           <div className="modal-btns"><button className="btn btn-outline" style={{flex:1}} onClick={() => setModal(null)}>취소</button><button className="btn btn-accent" style={{flex:1}} onClick={handleAddProposal}>제안하기</button></div>
         </div></div>
       )}

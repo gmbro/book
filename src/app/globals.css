@@ -256,6 +256,14 @@ html, body {
 }
 .cal-dot.confirmed { background: var(--green); }
 
+.cal-day.confirmed-day { background: var(--green-soft); font-weight: 600; }
+.cal-day.confirmed-day:hover { background: rgba(46, 204, 113, 0.2); }
+
+/* deadline */
+.deadline-bar { font-size: 11px; color: var(--orange); display: flex; align-items: center; gap: 4px; margin-bottom: 6px; }
+.deadline-bar.expired { color: var(--red); }
+.badge-completed { background: rgba(108,92,231,0.1); color: var(--accent); }
+
 /* ===== PROPOSAL VOTE ===== */
 .vote-card {
   background: var(--bg-card);
