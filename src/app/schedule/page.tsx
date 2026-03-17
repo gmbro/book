@@ -101,6 +101,7 @@ export default function SchedulePage() {
   const [modal, setModal] = useState<string | null>(null);
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const [form, setForm] = useState<Record<string,any>>({});
+  const [confirmAction, setConfirmAction] = useState<{msg:string;action:()=>void}|null>(null);
 
   useEffect(() => {
     // 앱 데이터 버전 — 변경 시 로컬 스토리지 자동 초기화
@@ -235,9 +236,11 @@ export default function SchedulePage() {
   };
 
   const handleDeleteProposal = async (pid: string) => {
-    if (!confirm('이 일정을 삭제하시겠습니까?')) return;
-    if (useLocal) { const up = proposals.filter(p => p.id !== pid); setProposals(up); saveProposals(up); }
-    else { await supabase.from('schedule_proposals').delete().eq('id', pid); init(); }
+    setConfirmAction({msg:'이 일정을 삭제하시겠습니까?', action: async () => {
+      if (useLocal) { const up = proposals.filter(p => p.id !== pid); setProposals(up); saveProposals(up); }
+      else { await supabase.from('schedule_proposals').delete().eq('id', pid); init(); }
+      setConfirmAction(null);
+    }});
   };
 
   // 모임일정 등록 → 바로 confirmed 미팅 생성
@@ -246,67 +249,78 @@ export default function SchedulePage() {
     const entries = (form.entries || []) as {date:string;time:string}[];
     if (entries.length === 0) { alert('날짜를 1개 이상 추가해주세요.'); return; }
     const summary = entries.map((e:{date:string;time:string}) => `${e.date} ${e.time}`).join('\n');
-    if (!confirm(`다음 날짜로 등록하시겠습니까?\n\n${summary}`)) return;
-    const newMeetings: Meeting[] = entries.map((e:{date:string;time:string}, i:number) => ({
-      id: `m-${Date.now()}-${i}`, date: e.date, time: e.time || '오후 3시', location: null, status: 'confirmed' as const, proposal_id: null, book_title: null, book_author: null, created_at: ''
-    }));
-    if (useLocal) {
-      const um = [...meetings, ...newMeetings]; setMeetings(um); saveMeetings(um);
-    } else {
-      for (const m of newMeetings) {
-        await supabase.from('meetings').insert({ date: m.date, time: m.time, status: 'confirmed' });
+    setConfirmAction({msg:`다음 날짜로 등록하시겠습니까?\n\n${summary}`, action: async () => {
+      const newMeetings: Meeting[] = entries.map((e:{date:string;time:string}, i:number) => ({
+        id: `m-${Date.now()}-${i}`, date: e.date, time: e.time || '오후 3시', location: null, status: 'confirmed' as const, proposal_id: null, book_title: null, book_author: null, created_at: ''
+      }));
+      if (useLocal) {
+        const um = [...meetings, ...newMeetings]; setMeetings(um); saveMeetings(um);
+      } else {
+        for (const m of newMeetings) {
+          await supabase.from('meetings').insert({ date: m.date, time: m.time, status: 'confirmed' });
+        }
+        init();
       }
-      init();
-    }
-    setForm({}); setModal(null);
+      setForm({}); setModal(null);
+      setConfirmAction(null);
+    }});
   };
 
   const handleConfirm = async () => {
     if (!form.proposal || !form.date) return;
-    if (!confirm('이번 모임은 이 일정으로 확정하시겠습니까?')) return;
-    const m: Meeting = { id: `m-${Date.now()}`, date: form.date, time: form.time || '오후 3시', location: null, status: 'confirmed', proposal_id: form.proposal, book_title: null, book_author: null, created_at: '' };
-    if (useLocal) { const um = [...meetings, m]; setMeetings(um); saveMeetings(um); }
-    else { await supabase.from('meetings').insert({ date: form.date, time: form.time || '오후 3시', status: 'confirmed', proposal_id: form.proposal }); init(); }
-    setForm({}); setModal(null);
-    // 자동 다음 모임 제안
-    setTimeout(() => {
-      if (confirm('다음 모임 일정도 제안하시겠습니까?')) {
-        setForm({}); setModal('propose');
-      }
-    }, 500);
+    setConfirmAction({msg:'이번 모임은 이 일정으로 확정하시겠습니까?', action: async () => {
+      const m: Meeting = { id: `m-${Date.now()}`, date: form.date, time: form.time || '오후 3시', location: null, status: 'confirmed', proposal_id: form.proposal, book_title: null, book_author: null, created_at: '' };
+      if (useLocal) { const um = [...meetings, m]; setMeetings(um); saveMeetings(um); }
+      else { await supabase.from('meetings').insert({ date: form.date, time: form.time || '오후 3시', status: 'confirmed', proposal_id: form.proposal }); init(); }
+      setForm({}); setModal(null);
+      setConfirmAction(null);
+      // 자동 다음 모임 제안
+      setTimeout(() => {
+        setConfirmAction({msg:'다음 모임 일정도 제안하시겠습니까?', action: () => {
+          setForm({}); setModal('propose');
+          setConfirmAction(null);
+        }});
+      }, 500);
+    }});
   };
 
   const handleCompleteMeeting = async (mid: string) => {
-    if (!confirm('이 모임을 완료 처리하시겠습니까?')) return;
-    if (useLocal) {
-      const um = meetings.map(m => m.id === mid ? { ...m, status: 'completed' as const } : m);
-      setMeetings(um); saveMeetings(um);
-    } else {
-      await supabase.from('meetings').update({ status: 'completed' }).eq('id', mid); init();
-    }
+    setConfirmAction({msg:'이 모임을 완료 처리하시겠습니까?', action: async () => {
+      if (useLocal) {
+        const um = meetings.map(m => m.id === mid ? { ...m, status: 'completed' as const } : m);
+        setMeetings(um); saveMeetings(um);
+      } else {
+        await supabase.from('meetings').update({ status: 'completed' }).eq('id', mid); init();
+      }
+      setConfirmAction(null);
+    }});
   };
 
   const handleCancelMeeting = async (mid: string) => {
-    if (!confirm('이 모임 확정을 취소하시겠습니까?')) return;
-    if (useLocal) {
-      const um = meetings.filter(m => m.id !== mid); setMeetings(um); saveMeetings(um);
-    } else {
-      await supabase.from('meetings').delete().eq('id', mid); init();
-    }
+    setConfirmAction({msg:'이 모임 확정을 취소하시겠습니까?', action: async () => {
+      if (useLocal) {
+        const um = meetings.filter(m => m.id !== mid); setMeetings(um); saveMeetings(um);
+      } else {
+        await supabase.from('meetings').delete().eq('id', mid); init();
+      }
+      setConfirmAction(null);
+    }});
   };
 
   const handleDeleteMeeting = async (mid: string) => {
-    if (!confirm('이 모임 기록을 삭제하시겠습니까? 모든 데이터가 삭제됩니다.')) return;
-    if (useLocal) {
-      const um = meetings.filter(m => m.id !== mid); setMeetings(um); saveMeetings(um);
-      localStorage.removeItem(`discussions-${mid}`);
-      localStorage.removeItem(`record-${mid}`);
-    } else {
-      await supabase.from('meeting_records').delete().eq('meeting_id', mid);
-      await supabase.from('discussion_items').delete().eq('meeting_id', mid);
-      await supabase.from('meetings').delete().eq('id', mid);
-      init();
-    }
+    setConfirmAction({msg:'이 모임 기록을 삭제하시겠습니까? 모든 데이터가 삭제됩니다.', action: async () => {
+      if (useLocal) {
+        const um = meetings.filter(m => m.id !== mid); setMeetings(um); saveMeetings(um);
+        localStorage.removeItem(`discussions-${mid}`);
+        localStorage.removeItem(`record-${mid}`);
+      } else {
+        await supabase.from('meeting_records').delete().eq('meeting_id', mid);
+        await supabase.from('discussion_items').delete().eq('meeting_id', mid);
+        await supabase.from('meetings').delete().eq('id', mid);
+        init();
+      }
+      setConfirmAction(null);
+    }});
   };
 
   // 달력에서 확정된 날짜 클릭 → 상세 페이지로 이동
@@ -327,9 +341,11 @@ export default function SchedulePage() {
 
   const delMember = async (m: Member) => {
     if (m.role === 'leader') return alert('모임장은 제외할 수 없습니다.');
-    if (!confirm(`${m.name}님을 제외하시겠습니까?`)) return;
-    if (useLocal) { const um = members.filter(x => x.id !== m.id); setMembers(um); localStorage.setItem('membersList', JSON.stringify(um)); }
-    else { await supabase.from('members').delete().eq('id', m.id); init(); }
+    setConfirmAction({msg:`${m.name}님을 제외하시겠습니까?`, action: async () => {
+      if (useLocal) { const um = members.filter(x => x.id !== m.id); setMembers(um); localStorage.setItem('membersList', JSON.stringify(um)); }
+      else { await supabase.from('members').delete().eq('id', m.id); init(); }
+      setConfirmAction(null);
+    }});
   };
 
   const proposedDates = proposals.flatMap(p => p.dates || []);
@@ -364,17 +380,16 @@ export default function SchedulePage() {
     if (!user) return;
     if (!form.pollDesc?.trim()) { alert('투표 내용을 입력해주세요.'); return; }
     const schedules = (form.pollSchedules || []) as {date:string;time:string}[];
-    if (schedules.length === 0 || !schedules[0].date) { alert('일정을 1개 이상 추가해주세요.'); return; }
-    // title = location + first date summary
+    const validSchedules = schedules.filter(s => s.date);
+    // title = location
     const title = form.pollLocation?.trim() || '장소 미정';
     const desc = form.pollDesc.trim();
     // deadline = explicit or last schedule date + 23:59
-    const lastDate = schedules[schedules.length - 1].date;
-    const deadlineDate = form.pollDeadline || lastDate;
-    const deadline = new Date(deadlineDate + 'T23:59:59').toISOString();
+    const deadlineDate = form.pollDeadline || (validSchedules.length > 0 ? validSchedules[validSchedules.length - 1].date : null);
+    const deadline = deadlineDate ? new Date(deadlineDate + 'T23:59:59').toISOString() : null;
     // full description with schedules
-    const scheduleText = schedules.map(s => `${s.date} ${s.time}`).join('\n');
-    const fullDesc = `${desc}\n\n📅 일정:\n${scheduleText}`;
+    const scheduleText = validSchedules.length > 0 ? validSchedules.map(s => `${s.date} ${s.time}`).join('\n') : '';
+    const fullDesc = scheduleText ? `${desc}\n\n📅 일정:\n${scheduleText}` : desc;
     if (useLocal) {
       const newPoll: PollWithVotes = {
         id: `poll-${Date.now()}`, title, description: fullDesc,
@@ -753,10 +768,13 @@ export default function SchedulePage() {
           })}
         </div>
 
-        {/* 모임일정 등록 + 투표 만들기 버튼 (최하단) */}
+        {/* 하단 버튼 */}
         <div style={{display:'flex',flexDirection:'column',gap:'6px',marginTop:'12px'}}>
           <button className="btn btn-accent btn-full" onClick={() => { setForm({entries:[{date:'',time:'오후 3시'}]}); setModal('register'); }}>+ 모임일정 등록하기</button>
           <button className="btn btn-outline btn-full" style={{gap:'6px'}} onClick={() => { setForm({}); setModal('poll'); }}>{Icons.poll} 투표 만들기</button>
+          {isLeader && (
+            <button className="btn btn-outline btn-full" style={{gap:'6px'}} onClick={() => setModal('members')}>{Icons.users} 모임원 관리</button>
+          )}
         </div>
       </div>
 
@@ -929,6 +947,17 @@ export default function SchedulePage() {
           <div className="form-group"><label className="form-label">도서명</label><input className="input" placeholder="도서명" value={form.bookTitle||''} onChange={e => setForm({...form,bookTitle:e.target.value})} /></div>
           <div className="modal-btns"><button className="btn btn-outline" style={{flex:1}} onClick={() => setModal(null)}>취소</button><button className="btn btn-accent" style={{flex:1}} onClick={handleEditMeeting}>수정</button></div>
         </div></div>
+      )}
+      {confirmAction && (
+        <div className="overlay" onClick={() => setConfirmAction(null)} style={{zIndex:300}}>
+          <div className="modal" onClick={e => e.stopPropagation()} style={{maxWidth:'340px',textAlign:'center'}}>
+            <p style={{fontSize:'14px',lineHeight:1.7,whiteSpace:'pre-wrap',margin:'16px 0 20px'}}>{confirmAction.msg}</p>
+            <div className="modal-btns">
+              <button className="btn btn-outline" style={{flex:1}} onClick={() => setConfirmAction(null)}>취소</button>
+              <button className="btn btn-accent" style={{flex:1}} onClick={confirmAction.action}>확인</button>
+            </div>
+          </div>
+        </div>
       )}
 
     </div>
