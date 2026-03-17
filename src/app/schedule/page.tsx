@@ -118,7 +118,7 @@ export default function SchedulePage() {
     }
 
     const u = localStorage.getItem('currentUser');
-    if (!u) { router.push('/'); return; }
+    if (!u) { router.push('/',action:()=>setConfirmAction(null)}); return; }
     setUser(JSON.parse(u));
     init();
   }, [router]);
@@ -250,7 +250,7 @@ export default function SchedulePage() {
   const handleRegisterMeeting = async () => {
     if (!user) return;
     const entries = (form.entries || []) as {date:string;time:string}[];
-    if (entries.length === 0) { alert('날짜를 1개 이상 추가해주세요.'); return; }
+    if (entries.length === 0) { setConfirmAction({msg:'날짜를 1개 이상 추가해주세요.',action:()=>setConfirmAction(null)}); return; }
     const summary = entries.map((e:{date:string;time:string}) => `${e.date} ${e.time}`).join('\n');
     setConfirmAction({msg:`다음 날짜로 등록하시겠습니까?\n\n${summary}`, action: async () => {
       const newMeetings: Meeting[] = entries.map((e:{date:string;time:string}, i:number) => ({
@@ -343,7 +343,7 @@ export default function SchedulePage() {
   };
 
   const delMember = async (m: Member) => {
-    if (m.role === 'leader') return alert('모임장은 제외할 수 없습니다.');
+    if (m.role === 'leader') setConfirmAction({msg:'모임장은 제외할 수 없습니다.',action:()=>setConfirmAction(null)}); return;
     setConfirmAction({msg:`${m.name}님을 제외하시겠습니까?`, action: async () => {
       if (useLocal) { const um = members.filter(x => x.id !== m.id); setMembers(um); localStorage.setItem('membersList', JSON.stringify(um)); }
       else { await supabase.from('members').delete().eq('id', m.id); init(); }
@@ -363,7 +363,7 @@ export default function SchedulePage() {
       navigator.share({ title: '1+1 독서모임 투표', text });
     } else {
       navigator.clipboard.writeText(text);
-      alert('알림 내용이 복사되었습니다! 카카오톡에 붙여넣기 해주세요.');
+      setConfirmAction({msg:'알림 내용이 복사되었습니다! 카카오톡에 붙여넣기 해주세요.',action:()=>setConfirmAction(null)});
     }
   };
 
@@ -381,12 +381,12 @@ export default function SchedulePage() {
   // ===== 투표(Poll) CRUD =====
   const handleCreatePoll = async () => {
     if (!user) return;
-    if (!form.pollDesc?.trim()) { alert('투표 내용을 입력해주세요.'); return; }
-    if (!form.pollLocation?.trim()) { alert('장소를 입력해주세요.'); return; }
+    if (!form.pollDesc?.trim()) { setConfirmAction({msg:'투표 내용을 입력해주세요.',action:()=>setConfirmAction(null)}); return; }
+    if (!form.pollLocation?.trim()) { setConfirmAction({msg:'장소를 입력해주세요.',action:()=>setConfirmAction(null)}); return; }
     const schedules = (form.pollSchedules || [{date:'',time:'오후 3시'}]) as {date:string;time:string}[];
     const validSchedules = schedules.filter(s => s.date);
-    if (validSchedules.length === 0) { alert('일정을 입력해주세요.'); return; }
-    if (!form.pollDeadline) { alert('투표 마감 기한을 입력해주세요.'); return; }
+    if (validSchedules.length === 0) { setConfirmAction({msg:'일정을 입력해주세요.',action:()=>setConfirmAction(null)}); return; }
+    if (!form.pollDeadline) { setConfirmAction({msg:'투표 마감 기한을 입력해주세요.',action:()=>setConfirmAction(null)}); return; }
     const title = form.pollLocation.trim();
     const desc = form.pollDesc.trim();
     // deadline = explicit or last schedule date + 23:59
@@ -414,9 +414,9 @@ export default function SchedulePage() {
 
   const handleUpdatePoll = async () => {
     if (!form.editPollId) return;
-    if (!form.pollDesc?.trim()) { alert('투표 내용을 입력해주세요.'); return; }
+    if (!form.pollDesc?.trim()) { setConfirmAction({msg:'투표 내용을 입력해주세요.',action:()=>setConfirmAction(null)}); return; }
     const schedules = (form.pollSchedules || []) as {date:string;time:string}[];
-    if (schedules.length === 0 || !schedules[0].date) { alert('일정을 1개 이상 추가해주세요.'); return; }
+    if (schedules.length === 0 || !schedules[0].date) { setConfirmAction({msg:'일정을 1개 이상 추가해주세요.',action:()=>setConfirmAction(null)}); return; }
     const title = form.pollLocation?.trim() || '장소 미정';
     const desc = form.pollDesc.trim();
     const lastDate = schedules[schedules.length - 1].date;
@@ -520,8 +520,8 @@ export default function SchedulePage() {
   const handleChangeBirthday = async () => {
     if (!user) return;
     const newBday = form.newBirthday;
-    if (!/^\d{6}$/.test(newBday)) { alert('생년월일 6자리를 입력해주세요'); return; }
-    if (newBday !== form.newBirthdayConfirm) { alert('생년월일이 일치하지 않습니다'); return; }
+    if (!/^\d{6}$/.test(newBday)) { setConfirmAction({msg:'생년월일 6자리를 입력해주세요',action:()=>setConfirmAction(null)}); return; }
+    if (newBday !== form.newBirthdayConfirm) { setConfirmAction({msg:'생년월일이 일치하지 않습니다',action:()=>setConfirmAction(null)}); return; }
     if (useLocal) {
       const updated = { ...user, birthday: newBday };
       const um = members.map(m => m.id === user.id ? updated : m);
@@ -536,7 +536,7 @@ export default function SchedulePage() {
       setUser(updated);
     }
     setForm({}); setModal(null);
-    alert('생년월일이 변경되었습니다.');
+    setConfirmAction({msg:'생년월일이 변경되었습니다.',action:()=>setConfirmAction(null)});
   };
 
   /* ===== 메인 원페이지 ===== */
@@ -792,7 +792,7 @@ export default function SchedulePage() {
 
         {/* 하단 버튼 */}
         <div style={{display:'flex',flexDirection:'column',gap:'6px',marginTop:'12px'}}>
-          <button className="btn btn-accent btn-full" style={{gap:'6px'}} onClick={() => { setForm({}); setModal('poll'); }}>{Icons.poll} 일정 투표하기</button>
+          <button className="btn btn-accent btn-full" style={{gap:'6px'}} onClick={() => { const t=new Date(); const d=new Date(t); d.setDate(d.getDate()+3); const fmt=(x:Date)=>x.toISOString().slice(0,10); setForm({pollSchedules:[{date:fmt(t),time:'오후 3시'}],pollDeadline:fmt(d)}); setModal('poll'); }}>{Icons.poll} 일정 투표하기</button>
         </div>
       </div>
 
