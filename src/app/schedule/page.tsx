@@ -229,6 +229,29 @@ export default function SchedulePage() {
     }
   };
 
+  const handleCancelMeeting = async (mid: string) => {
+    if (!confirm('이 모임 확정을 취소하시겠습니까?')) return;
+    if (useLocal) {
+      const um = meetings.filter(m => m.id !== mid); setMeetings(um); saveMeetings(um);
+    } else {
+      await supabase.from('meetings').delete().eq('id', mid); init();
+    }
+  };
+
+  const handleDeleteMeeting = async (mid: string) => {
+    if (!confirm('이 모임 기록을 삭제하시겠습니까? 모든 데이터가 삭제됩니다.')) return;
+    if (useLocal) {
+      const um = meetings.filter(m => m.id !== mid); setMeetings(um); saveMeetings(um);
+      localStorage.removeItem(`discussions-${mid}`);
+      localStorage.removeItem(`record-${mid}`);
+    } else {
+      await supabase.from('meeting_records').delete().eq('meeting_id', mid);
+      await supabase.from('discussion_items').delete().eq('meeting_id', mid);
+      await supabase.from('meetings').delete().eq('id', mid);
+      init();
+    }
+  };
+
   // 달력에서 확정된 날짜 클릭 → 상세 페이지로 이동
   const handleCalendarDateClick = (dateStr: string) => {
     const m = meetings.find(mt => mt.date === dateStr);
@@ -283,31 +306,6 @@ export default function SchedulePage() {
 
         {/* 달력 */}
         <Calendar proposedDates={proposedDates} confirmedDates={confirmedDates} onDateClick={handleCalendarDateClick} />
-
-        {/* 확정된 모임 */}
-        {meetings.length > 0 && (
-          <div className="section">
-            <div className="section-title">{Icons.pin} 확정된 모임</div>
-            {meetings.map(m => (
-              <div key={m.id} className="meeting-item" onClick={() => router.push(`/meeting/${m.id}`)}>
-                <div className="meeting-badge">
-                  <span className="mm">{m.date ? new Date(m.date+'T00:00:00').toLocaleDateString('ko',{month:'short'}) : ''}</span>
-                  <span className="dd">{m.date ? new Date(m.date+'T00:00:00').getDate() : '?'}</span>
-                </div>
-                <div className="meeting-info">
-                  <h4>{m.date ? new Date(m.date+'T00:00:00').toLocaleDateString('ko',{month:'long',day:'numeric',weekday:'short'}) : '미정'}</h4>
-                  <p>{m.time||'시간 미정'} · {m.book_title||'도서 미선정'}</p>
-                </div>
-                <div style={{display:'flex',alignItems:'center',gap:'6px'}}>
-                  <span className={`badge ${m.status==='completed'?'badge-completed':'badge-green'}`}>{m.status==='completed'?'완료':'확정'}</span>
-                  {m.status==='confirmed' && (
-                    <button className="btn-danger-sm" style={{fontSize:'10px',padding:'2px 6px'}} onClick={(e) => { e.stopPropagation(); handleCompleteMeeting(m.id); }}>완료</button>
-                  )}
-                </div>
-              </div>
-            ))}
-          </div>
-        )}
 
         {/* 모임 일정 (투표) */}
         <div className="section">
@@ -396,10 +394,16 @@ export default function SchedulePage() {
                   <h4>{m.date ? new Date(m.date+'T00:00:00').toLocaleDateString('ko',{month:'long',day:'numeric',weekday:'short'}) : '미정'}</h4>
                   <p>{m.time||'시간 미정'} · {m.book_title||'도서 미선정'}</p>
                 </div>
-                <div style={{display:'flex',alignItems:'center',gap:'6px'}}>
+                <div style={{display:'flex',alignItems:'center',gap:'4px',flexWrap:'wrap'}}>
                   <span className={`badge ${m.status==='completed'?'badge-completed':'badge-green'}`}>{m.status==='completed'?'완료':'확정'}</span>
-                  {m.status==='confirmed' && (
+                  {isLeader && m.status==='confirmed' && (
                     <button className="btn-danger-sm" style={{fontSize:'10px',padding:'2px 6px'}} onClick={(e) => { e.stopPropagation(); handleCompleteMeeting(m.id); }}>완료</button>
+                  )}
+                  {isLeader && m.status==='confirmed' && (
+                    <button className="btn-danger-sm" style={{fontSize:'10px',padding:'2px 6px',background:'var(--bg-input)',color:'var(--text-sub)',border:'1px solid var(--border)'}} onClick={(e) => { e.stopPropagation(); handleCancelMeeting(m.id); }}>확정취소</button>
+                  )}
+                  {isLeader && (
+                    <button className="btn-danger-sm" style={{fontSize:'10px',padding:'2px 6px'}} onClick={(e) => { e.stopPropagation(); handleDeleteMeeting(m.id); }}>삭제</button>
                   )}
                 </div>
               </div>
