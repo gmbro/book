@@ -27,6 +27,7 @@ export default function MeetingDetailPage({ params }: { params: Promise<{ id: st
   const [meeting, setMeeting] = useState<Meeting | null>(null);
   const [discussions, setDiscussions] = useState<DiscussionItem[]>([]);
   const [record, setRecord] = useState<MeetingRecord | null>(null);
+  const [records, setRecords] = useState<{id:string;content:string;author:string;created_at:string}[]>([]);
   const [members, setMembers] = useState<Member[]>([]);
   const [useLocal, setUseLocal] = useState(false);
   const [activeTab, setActiveTab] = useState<'book' | 'disc' | 'rec'>('book');
@@ -36,6 +37,7 @@ export default function MeetingDetailPage({ params }: { params: Promise<{ id: st
   const [discForm, setDiscForm] = useState({ type: 'topic' as 'topic' | 'question', content: '' });
   const [recContent, setRecContent] = useState('');
   const [summaryLoading, setSummaryLoading] = useState(false);
+  const [isListening, setIsListening] = useState(false);
 
   // 도서 검색
   const [bookQuery, setBookQuery] = useState('');
@@ -73,6 +75,9 @@ export default function MeetingDetailPage({ params }: { params: Promise<{ id: st
         if (dd) setDiscussions(dd);
         const { data: rd } = await supabase.from('meeting_records').select('*').eq('meeting_id', id).order('created_at', { ascending: false }).limit(1).single();
         if (rd) { setRecord(rd); setRecContent(rd.content || ''); }
+        // load records list
+        const storedRecs = localStorage.getItem(`records-list-${id}`);
+        if (storedRecs) setRecords(JSON.parse(storedRecs));
         return;
       }
     } catch { /* fallback to local */ }
@@ -83,6 +88,8 @@ export default function MeetingDetailPage({ params }: { params: Promise<{ id: st
     if (sd) setDiscussions(JSON.parse(sd));
     const sr = localStorage.getItem(`record-${id}`);
     if (sr) { const parsed = JSON.parse(sr); setRecord(parsed); setRecContent(parsed.content || ''); }
+    const storedRecs = localStorage.getItem(`records-list-${id}`);
+    if (storedRecs) setRecords(JSON.parse(storedRecs));
   };
 
   // 도서 검색
@@ -190,28 +197,54 @@ export default function MeetingDetailPage({ params }: { params: Promise<{ id: st
   // form state for edit
   const [form, setForm] = useState<Record<string, string>>({});
 
-  const saveRecord = async (content?: string) => {
-    const c = content ?? recContent;
-    const r: MeetingRecord = { id: record?.id || `r-${Date.now()}`, meeting_id: id, content: c, audio_url: record?.audio_url || audioUrl, ai_summary: record?.ai_summary || null, created_at: new Date().toISOString() };
-    setRecord(r);
-    if (useLocal) {
-      localStorage.setItem(`record-${id}`, JSON.stringify(r));
-    } else {
-      if (record?.id) await supabase.from('meeting_records').update({ content: c }).eq('id', record.id);
-      else await supabase.from('meeting_records').insert({ meeting_id: id, content: c, audio_url: audioUrl });
-    }
-    setModal(null);
+  const addRecord = () => {
+    if (!recContent.trim() || !currentUser) return;
+    const newRec = { id: `rec-${Date.now()}`, content: recContent.trim(), author: currentUser.name, created_at: new Date().toISOString() };
+    const updated = [newRec, ...records];
+    setRecords(updated);
+    localStorage.setItem(`records-list-${id}`, JSON.stringify(updated));
+    setRecContent('');
   };
 
-  const clearRecord = async () => {
-    if (!confirm('모임 기록을 모두 삭제하시겠습니까?')) return;
-    if (useLocal) {
-      localStorage.removeItem(`record-${id}`);
-    } else if (record?.id) {
-      await supabase.from('meeting_records').delete().eq('id', record.id);
-    }
-    setRecord(null); setRecContent(''); setAudioUrl(null);
+  const deleteRecord = (rid: string) => {
+    if (!confirm('이 기록을 삭제하시겠습니까?')) return;
+    const updated = records.filter(r => r.id !== rid);
+    setRecords(updated);
+    localStorage.setItem(`records-list-${id}`, JSON.stringify(updated));
   };
+
+  const clearAllRecords = () => {
+    if (!confirm('모든 기록을 삭제하시겠습니까?')) return;
+    setRecords([]);
+    localStorage.removeItem(`records-list-${id}`);
+  };
+
+  const toggleSpeech = () => {
+    const SR = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+    if (!SR) { alert('이 브라우저는 음성인식을 지원하지 않습니다.'); return; }
+    if (isListening) { setIsListening(false); return; }
+    const recognition = new SR();
+    recognition.lang = 'ko-KR';
+    recognition.continuous = true;
+    recognition.interimResults = true;
+    let finalText = recContent;
+    recognition.onresult = (e: any) => {
+      let interim = '';
+      for (let i = e.resultIndex; i < e.results.length; i++) {
+        if (e.results[i].isFinal) finalText += e.results[i][0].transcript + ' ';
+        else interim += e.results[i][0].transcript;
+      }
+      setRecContent(finalText + interim);
+    };
+    recognition.onend = () => { setIsListening(false); setRecContent(finalText); };
+    recognition.onerror = () => setIsListening(false);
+    recognition.start();
+    setIsListening(true);
+    (window as any).__recognition = recognition;
+  };
+
+  // stop speech on unmount
+  useEffect(() => () => { (window as any).__recognition?.stop(); }, []);
 
   const doSummary = async () => {
     if (!record?.content && discussions.length === 0) { alert('요약할 내용이 없습니다.'); return; }
@@ -359,21 +392,44 @@ export default function MeetingDetailPage({ params }: { params: Promise<{ id: st
         {activeTab === 'rec' && (
           <div className="section">
             <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:'10px'}}>
-              <div className="section-title" style={{marginBottom:0}}>{Icons.edit} 모임 기록</div>
-              {record?.content && (
-                <button className="btn-danger-sm" style={{fontSize:'10px',padding:'2px 8px'}} onClick={clearRecord}>전체 삭제</button>
+              <div className="section-title" style={{marginBottom:0,display:'flex',alignItems:'center',gap:'6px'}}>
+                {Icons.edit} 모임 기록
+                <button
+                  onClick={toggleSpeech}
+                  style={{background: isListening ? '#ef4444' : 'var(--bg-input)', border:'1px solid var(--border)', borderRadius:'50%', width:'26px', height:'26px', display:'flex', alignItems:'center', justifyContent:'center', cursor:'pointer', transition:'all 0.2s', animation: isListening ? 'pulse 1.5s infinite' : 'none'}}
+                  title={isListening ? '음성인식 중지' : '음성으로 기록'}
+                >
+                  <span style={{color: isListening ? '#fff' : 'var(--text-sub)', fontSize:'12px'}}>{Icons.mic}</span>
+                </button>
+                {isListening && <span style={{fontSize:'11px',color:'#ef4444',fontWeight:500}}>인식 중...</span>}
+              </div>
+              {records.length > 0 && (
+                <button className="btn-danger-sm" style={{fontSize:'10px',padding:'2px 8px'}} onClick={clearAllRecords}>전체 삭제</button>
               )}
             </div>
-            <textarea
-              className="input"
-              style={{minHeight:'150px',marginBottom:'8px',fontSize:'13px',lineHeight:'1.7'}}
-              placeholder="모임 내용을 자유롭게 기록해주세요..."
-              value={recContent}
-              onChange={e => setRecContent(e.target.value)}
-            />
-            <button className="btn btn-accent btn-full" onClick={() => saveRecord()} disabled={!recContent.trim()}>
-              {record?.content ? '수정 저장' : '기록 저장'}
-            </button>
+            <div style={{display:'flex',gap:'6px',marginBottom:'10px'}}>
+              <textarea
+                className="input"
+                style={{minHeight:'60px',fontSize:'13px',lineHeight:'1.7',flex:1}}
+                placeholder="모임 내용을 자유롭게 기록해주세요..."
+                value={recContent}
+                onChange={e => setRecContent(e.target.value)}
+              />
+            </div>
+            <button className="btn btn-accent btn-full" style={{marginBottom:'12px'}} onClick={addRecord} disabled={!recContent.trim()}>기록 추가</button>
+            {records.length > 0 ? (
+              <div style={{display:'flex',flexDirection:'column',gap:'8px'}}>
+                {records.map(r => (
+                  <div key={r.id} style={{padding:'10px 12px',background:'var(--bg-input)',borderRadius:'var(--r-sm)',border:'1px solid var(--border)'}}>
+                    <div style={{fontSize:'13px',lineHeight:'1.7',whiteSpace:'pre-wrap'}}>{r.content}</div>
+                    <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginTop:'6px'}}>
+                      <div style={{fontSize:'11px',color:'var(--text-muted)'}}>{r.author} · {new Date(r.created_at).toLocaleString('ko',{month:'short',day:'numeric',hour:'2-digit',minute:'2-digit'})}</div>
+                      <button className="del-btn" onClick={() => deleteRecord(r.id)}>✕</button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            ) : <div className="empty">아직 기록이 없습니다</div>}
           </div>
         )}
       </div>
