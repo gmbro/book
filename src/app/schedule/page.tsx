@@ -309,8 +309,7 @@ export default function SchedulePage() {
           </div>
         )}
 
-        {/* 모임 일정 (투표) - 확정된 모임이 없을 때만 표시 */}
-        {meetings.length === 0 && (
+        {/* 모임 일정 (투표) */}
         <div className="section">
           <div className="section-title">{Icons.vote} 모임 일정</div>
           {proposals.map(p => {
@@ -382,7 +381,6 @@ export default function SchedulePage() {
           })}
 
         </div>
-        )}
 
         {/* 모임 기록 리스트 (확정된 모임 날짜 클릭 → 상세 페이지) */}
         {meetings.length > 0 && (
