@@ -382,10 +382,12 @@ export default function SchedulePage() {
   const handleCreatePoll = async () => {
     if (!user) return;
     if (!form.pollDesc?.trim()) { alert('투표 내용을 입력해주세요.'); return; }
-    const schedules = (form.pollSchedules || []) as {date:string;time:string}[];
+    if (!form.pollLocation?.trim()) { alert('장소를 입력해주세요.'); return; }
+    const schedules = (form.pollSchedules || [{date:'',time:'오후 3시'}]) as {date:string;time:string}[];
     const validSchedules = schedules.filter(s => s.date);
-    // title = location
-    const title = form.pollLocation?.trim() || '장소 미정';
+    if (validSchedules.length === 0) { alert('일정을 입력해주세요.'); return; }
+    if (!form.pollDeadline) { alert('투표 마감 기한을 입력해주세요.'); return; }
+    const title = form.pollLocation.trim();
     const desc = form.pollDesc.trim();
     // deadline = explicit or last schedule date + 23:59
     const deadlineDate = form.pollDeadline || (validSchedules.length > 0 ? validSchedules[validSchedules.length - 1].date : null);
@@ -867,7 +869,7 @@ export default function SchedulePage() {
         <div className="overlay" onClick={() => setModal(null)}><div className="modal" onClick={e => e.stopPropagation()} style={{maxHeight:'85vh',overflow:'auto'}}>
           <h2>일정 투표하기</h2>
           <div className="form-group">
-            <label className="form-label">장소 (선택)</label>
+            <label className="form-label">장소</label>
             <input className="input" placeholder="예: 강남역 스타벅스" value={form.pollLocation||''} onChange={e => setForm({...form,pollLocation:e.target.value})} />
           </div>
           <div className="form-group">
@@ -875,29 +877,15 @@ export default function SchedulePage() {
             <textarea className="input" placeholder="투표에 대한 상세 설명을 적어주세요" value={form.pollDesc||''} onChange={e => setForm({...form,pollDesc:e.target.value})} />
           </div>
           <div className="form-group">
-            <label className="form-label">일정</label>
-            {((form.pollSchedules || [{date:'',time:'오후 3시'}]) as {date:string;time:string}[]).map((s: {date:string;time:string}, idx: number) => (
-              <div key={idx} style={{display:'flex',gap:'6px',alignItems:'center',marginBottom:'6px'}}>
-                <input className="input" type="date" style={{flex:1}} value={s.date} onChange={e => {
-                  const arr = [...((form.pollSchedules || [{date:'',time:'오후 3시'}]) as {date:string;time:string}[])];
-                  arr[idx] = {...arr[idx], date: e.target.value};
-                  setForm({...form, pollSchedules: arr});
-                }} />
-                <input className="input" style={{width:'100px'}} placeholder="오후 3시" value={s.time} onChange={e => {
-                  const arr = [...((form.pollSchedules || [{date:'',time:'오후 3시'}]) as {date:string;time:string}[])];
-                  arr[idx] = {...arr[idx], time: e.target.value};
-                  setForm({...form, pollSchedules: arr});
-                }} />
-                <button className="del-btn" onClick={() => {
-                  const arr = ((form.pollSchedules || [{date:'',time:'오후 3시'}]) as {date:string;time:string}[]).filter((_: {date:string;time:string}, i: number) => i !== idx);
-                  setForm({...form, pollSchedules: arr});
-                }}>x</button>
-              </div>
-            ))}
-            <button className="btn btn-outline btn-full" style={{fontSize:'12px',padding:'7px'}} onClick={() => {
-              const arr = [...((form.pollSchedules || [{date:'',time:'오후 3시'}]) as {date:string;time:string}[]), {date:'',time:'오후 3시'}];
-              setForm({...form, pollSchedules: arr});
-            }}>+ 일정 추가</button>
+            <label className="form-label">일시</label>
+            <div style={{display:'flex',gap:'6px',alignItems:'center'}}>
+              <input className="input" type="date" style={{flex:1}} value={(form.pollSchedules?.[0]?.date)||''} onChange={e => {
+                setForm({...form, pollSchedules: [{date: e.target.value, time: (form.pollSchedules?.[0]?.time)||'오후 3시'}]});
+              }} />
+              <input className="input" style={{width:'100px'}} placeholder="오후 3시" value={(form.pollSchedules?.[0]?.time)||'오후 3시'} onChange={e => {
+                setForm({...form, pollSchedules: [{date: (form.pollSchedules?.[0]?.date)||'', time: e.target.value}]});
+              }} />
+            </div>
           </div>
           <div className="form-group">
             <label className="form-label">투표 마감 기한</label>
