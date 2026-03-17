@@ -57,7 +57,8 @@ function buildInitialProposals(): ProposalWithVotes[] {
         mkVote('proposal-0','이경민','available'), mkVote('proposal-0','강다영','available'),
         mkVote('proposal-0','김지원','available'), mkVote('proposal-0','배성진','available'),
         mkVote('proposal-0','오영준','available'), mkVote('proposal-0','우동인','available'),
-        mkVote('proposal-0','이장민','available'), mkVote('proposal-0','송의선','unavailable'),
+        mkVote('proposal-0','이장민','available'),
+        mkVote('proposal-0','송의선','unavailable'),
       ],
     },
     {
@@ -66,7 +67,8 @@ function buildInitialProposals(): ProposalWithVotes[] {
       votes: [
         mkVote('proposal-1','송의선','available'), mkVote('proposal-1','오영준','available'),
         mkVote('proposal-1','이장민','available'), mkVote('proposal-1','한태원','available'),
-        mkVote('proposal-1','홍다혜','available'), mkVote('proposal-1','이경민','unavailable'),
+        mkVote('proposal-1','홍다혜','available'),
+        mkVote('proposal-1','이경민','unavailable'),
       ],
     },
     {
