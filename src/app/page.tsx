@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
 import { supabase, Member } from '@/lib/supabase';
 
@@ -42,6 +42,31 @@ export default function Home() {
     } catch { setMembers(DEFAULT_MEMBERS); setUseLocal(true); }
     setLoading(false);
   };
+
+  // 셔플 로직
+  const shuffled = useMemo(() => {
+    const arr = [...members];
+    for (let i = arr.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [arr[i], arr[j]] = [arr[j], arr[i]];
+    }
+    return arr;
+  }, [members]);
+
+  // 별똑별 애니메이션
+  const [particles, setParticles] = useState<{id:number;type:string;left:number;delay:number;dur:number;emoji:string}[]>([]);
+  useEffect(() => {
+    const emojis = ['🌟','⭐','🌠','🐻','🐰','🐱','🐶','🦊','🐾','🌿','🌸','🦥'];
+    const items = Array.from({length:14},(_,i) => ({
+      id: i,
+      type: i < 5 ? 'star' : 'animal',
+      left: Math.random()*100,
+      delay: Math.random()*8,
+      dur: 4 + Math.random()*6,
+      emoji: emojis[Math.floor(Math.random()*emojis.length)]
+    }));
+    setParticles(items);
+  }, []);
 
   const handleSelect = (m: Member) => {
     setSelectedMember(m);
@@ -113,11 +138,26 @@ export default function Home() {
   if (loading) return <div className="select-page"><h1>1+1 독서모임</h1><p className="desc">로딩 중...</p></div>;
 
   return (
-    <div className="select-page">
-      <h1>1+1 독서모임</h1>
-      <p className="desc">본인 선택 후 독서 모임일정을 확인해주세요</p>
-      <div className="user-grid">
-        {members.map(m => (
+    <div className="select-page" style={{position:'relative',overflow:'hidden'}}>
+      {/* 별똑별 & 동물 애니메이션 */}
+      {particles.map(p => (
+        <span key={p.id} style={{
+          position:'absolute',
+          left:`${p.left}%`,
+          top: p.type==='star' ? '-30px' : `${20+Math.random()*60}%`,
+          fontSize: p.type==='star' ? '14px' : '18px',
+          opacity: 0.6,
+          pointerEvents:'none',
+          zIndex:0,
+          animation: p.type==='star'
+            ? `shootingStar ${p.dur}s ${p.delay}s linear infinite`
+            : `floatAnimal ${p.dur}s ${p.delay}s ease-in-out infinite alternate`,
+        }}>{p.emoji}</span>
+      ))}
+      <h1 style={{position:'relative',zIndex:1}}>1+1 독서모임</h1>
+      <p className="desc" style={{position:'relative',zIndex:1}}>본인 선택 후 독서 모임일정을 확인해주세요</p>
+      <div className="user-grid" style={{position:'relative',zIndex:1}}>
+        {shuffled.map(m => (
           <button key={m.id} className={`user-btn ${m.role === 'leader' ? 'leader' : ''}`} style={{width:'100%'}} onClick={() => handleSelect(m)}>
             {m.name}
           </button>

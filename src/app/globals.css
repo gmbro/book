@@ -985,3 +985,17 @@ textarea.input { min-height: 90px; resize: vertical; }
 
 ::-webkit-scrollbar { width: 3px; }
 ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+
+@keyframes shootingStar {
+  0% { transform: translate(0, 0) rotate(-15deg); opacity: 0; }
+  10% { opacity: 0.8; }
+  100% { transform: translate(80px, 800px) rotate(-15deg); opacity: 0; }
+}
+
+@keyframes floatAnimal {
+  0% { transform: translate(0, 0) rotate(-5deg); }
+  25% { transform: translate(10px, -15px) rotate(5deg); }
+  50% { transform: translate(-5px, -25px) rotate(-3deg); }
+  75% { transform: translate(15px, -10px) rotate(8deg); }
+  100% { transform: translate(-10px, 5px) rotate(-5deg); }
+}
