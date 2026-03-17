@@ -1,30 +1,30 @@
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap');
 
 :root {
-  --bg-primary: #0a0a0f;
-  --bg-secondary: #111118;
-  --bg-card: #16161f;
-  --bg-card-hover: #1c1c28;
-  --bg-input: #1a1a25;
-  --border: #2a2a3a;
-  --border-light: #333345;
-  --text-primary: #f0f0f5;
-  --text-secondary: #9999aa;
-  --text-muted: #666678;
+  --bg-primary: #f5f5f7;
+  --bg-secondary: #ffffff;
+  --bg-card: #ffffff;
+  --bg-card-hover: #f9f9fb;
+  --bg-input: #f0f0f4;
+  --border: #e2e2ea;
+  --border-light: #d0d0da;
+  --text-primary: #1a1a2e;
+  --text-secondary: #5a5a7a;
+  --text-muted: #9494aa;
   --accent: #6c5ce7;
-  --accent-light: #a29bfe;
-  --accent-glow: rgba(108, 92, 231, 0.3);
+  --accent-light: #7c6cf7;
+  --accent-glow: rgba(108, 92, 231, 0.15);
   --success: #00b894;
-  --success-bg: rgba(0, 184, 148, 0.12);
-  --danger: #fd79a8;
-  --danger-bg: rgba(253, 121, 168, 0.12);
-  --warning: #ffc048;
-  --warning-bg: rgba(255, 192, 72, 0.12);
+  --success-bg: rgba(0, 184, 148, 0.1);
+  --danger: #e74c6f;
+  --danger-bg: rgba(231, 76, 111, 0.08);
+  --warning: #f39c12;
+  --warning-bg: rgba(243, 156, 18, 0.08);
   --gradient-accent: linear-gradient(135deg, #6c5ce7, #a29bfe);
-  --gradient-card: linear-gradient(145deg, #16161f, #1a1a28);
-  --shadow-sm: 0 2px 8px rgba(0, 0, 0, 0.3);
-  --shadow-md: 0 4px 16px rgba(0, 0, 0, 0.4);
-  --shadow-lg: 0 8px 32px rgba(0, 0, 0, 0.5);
+  --gradient-card: linear-gradient(145deg, #ffffff, #fafafc);
+  --shadow-sm: 0 1px 4px rgba(0, 0, 0, 0.06);
+  --shadow-md: 0 4px 12px rgba(0, 0, 0, 0.08);
+  --shadow-lg: 0 8px 24px rgba(0, 0, 0, 0.1);
   --radius-sm: 8px;
   --radius-md: 12px;
   --radius-lg: 16px;
@@ -113,12 +113,12 @@ html, body {
 }
 
 .btn-primary:hover {
-  box-shadow: 0 6px 20px var(--accent-glow);
+  box-shadow: 0 6px 20px rgba(108, 92, 231, 0.25);
   transform: translateY(-1px);
 }
 
 .btn-secondary {
-  background: var(--bg-card);
+  background: var(--bg-input);
   color: var(--text-primary);
   border: 1px solid var(--border);
 }
@@ -131,21 +131,21 @@ html, body {
 .btn-danger {
   background: var(--danger-bg);
   color: var(--danger);
-  border: 1px solid rgba(253, 121, 168, 0.2);
+  border: 1px solid rgba(231, 76, 111, 0.15);
 }
 
 .btn-danger:hover {
-  background: rgba(253, 121, 168, 0.2);
+  background: rgba(231, 76, 111, 0.15);
 }
 
 .btn-success {
   background: var(--success-bg);
   color: var(--success);
-  border: 1px solid rgba(0, 184, 148, 0.2);
+  border: 1px solid rgba(0, 184, 148, 0.15);
 }
 
 .btn-success:hover {
-  background: rgba(0, 184, 148, 0.2);
+  background: rgba(0, 184, 148, 0.15);
 }
 
 .btn-sm {
@@ -163,7 +163,7 @@ html, body {
   height: 36px;
   padding: 0;
   border-radius: var(--radius-sm);
-  background: var(--bg-card);
+  background: var(--bg-input);
   color: var(--text-secondary);
   border: 1px solid var(--border);
   font-size: 18px;
@@ -182,7 +182,7 @@ html, body {
   align-items: center;
   justify-content: center;
   border: none;
-  background: var(--bg-card);
+  background: var(--bg-input);
   color: var(--text-secondary);
   border-radius: var(--radius-sm);
   cursor: pointer;
@@ -198,15 +198,17 @@ html, body {
 
 /* ===== CARDS ===== */
 .card {
-  background: var(--gradient-card);
+  background: var(--bg-card);
   border: 1px solid var(--border);
   border-radius: var(--radius-lg);
   padding: 16px;
   transition: var(--transition);
+  box-shadow: var(--shadow-sm);
 }
 
 .card:hover {
   border-color: var(--border-light);
+  box-shadow: var(--shadow-md);
 }
 
 .card-header {
@@ -230,11 +232,12 @@ html, body {
 
 /* ===== CALENDAR ===== */
 .calendar {
-  background: var(--gradient-card);
+  background: var(--bg-card);
   border: 1px solid var(--border);
   border-radius: var(--radius-lg);
   padding: 16px;
   margin-bottom: 20px;
+  box-shadow: var(--shadow-sm);
 }
 
 .calendar-nav {
@@ -270,7 +273,7 @@ html, body {
 }
 
 .calendar-nav button:hover {
-  background: var(--bg-card-hover);
+  background: var(--border);
   color: var(--text-primary);
 }
 
@@ -279,7 +282,7 @@ html, body {
   width: auto !important;
   padding: 0 8px !important;
   font-weight: 600;
-  color: var(--accent-light) !important;
+  color: var(--accent) !important;
 }
 
 .calendar-grid {
@@ -318,7 +321,7 @@ html, body {
 
 .calendar-day.today {
   background: var(--accent-glow);
-  color: var(--accent-light);
+  color: var(--accent);
   font-weight: 700;
 }
 
@@ -327,7 +330,7 @@ html, body {
 }
 
 .calendar-day.has-proposal:hover {
-  background: var(--bg-card-hover);
+  background: var(--bg-input);
 }
 
 .calendar-dots {
@@ -364,16 +367,18 @@ html, body {
 }
 
 .proposal-card {
-  background: var(--gradient-card);
+  background: var(--bg-card);
   border: 1px solid var(--border);
   border-radius: var(--radius-lg);
   padding: 16px;
   margin-bottom: 10px;
   transition: var(--transition);
+  box-shadow: var(--shadow-sm);
 }
 
 .proposal-card:hover {
   border-color: var(--border-light);
+  box-shadow: var(--shadow-md);
 }
 
 .proposal-header {
@@ -387,7 +392,6 @@ html, body {
   font-size: 14px;
   font-weight: 600;
   line-height: 1.5;
-  flex: 1;
 }
 
 .proposal-proposer {
@@ -444,6 +448,7 @@ html, body {
 
 .vote-btn:hover {
   border-color: var(--border-light);
+  background: var(--bg-card-hover);
 }
 
 .vote-btn.active-available {
@@ -486,6 +491,7 @@ html, body {
   justify-content: center;
   min-height: 100vh;
   padding: 40px 20px;
+  background: linear-gradient(180deg, #f5f5f7 0%, #eeeef3 100%);
 }
 
 .user-select-page .logo {
@@ -522,25 +528,27 @@ html, body {
   align-items: center;
   justify-content: center;
   padding: 14px 16px;
-  background: var(--gradient-card);
+  background: var(--bg-card);
   border: 1px solid var(--border);
   border-radius: var(--radius-md);
   cursor: pointer;
   transition: var(--transition);
   font-size: 15px;
   font-weight: 500;
+  box-shadow: var(--shadow-sm);
 }
 
 .user-card:hover {
   border-color: var(--accent);
-  background: var(--bg-card-hover);
-  box-shadow: 0 0 20px var(--accent-glow);
+  background: white;
+  box-shadow: 0 4px 16px var(--accent-glow);
   transform: translateY(-2px);
 }
 
 .user-card.leader {
   border-color: var(--accent);
   position: relative;
+  background: linear-gradient(135deg, rgba(108,92,231,0.04), rgba(162,155,254,0.06));
 }
 
 .user-card.leader::after {
@@ -573,6 +581,7 @@ html, body {
   outline: none;
   border-color: var(--accent);
   box-shadow: 0 0 0 3px var(--accent-glow);
+  background: white;
 }
 
 .input::placeholder {
@@ -604,7 +613,7 @@ textarea.input {
   left: 0;
   width: 100%;
   height: 100%;
-  background: rgba(0, 0, 0, 0.7);
+  background: rgba(0, 0, 0, 0.3);
   backdrop-filter: blur(4px);
   display: flex;
   align-items: center;
@@ -624,6 +633,7 @@ textarea.input {
   max-height: 80vh;
   overflow-y: auto;
   animation: slideUp 0.3s ease;
+  box-shadow: var(--shadow-lg);
 }
 
 .modal h2 {
@@ -687,8 +697,8 @@ textarea.input {
 }
 
 .status-badge.completed {
-  background: rgba(108, 92, 231, 0.12);
-  color: var(--accent-light);
+  background: rgba(108, 92, 231, 0.1);
+  color: var(--accent);
 }
 
 /* ===== BOOK INFO ===== */
@@ -728,7 +738,7 @@ textarea.input {
 }
 
 .discussion-item-type.topic {
-  color: var(--accent-light);
+  color: var(--accent);
 }
 
 .discussion-item-type.question {
@@ -776,11 +786,12 @@ textarea.input {
 .record-btn.idle {
   background: var(--danger);
   color: white;
-  box-shadow: 0 4px 12px rgba(253, 121, 168, 0.4);
+  box-shadow: 0 4px 12px rgba(231, 76, 111, 0.3);
 }
 
 .record-btn.recording {
   background: var(--danger);
+  color: white;
   animation: pulse 1.5s infinite;
 }
 
@@ -805,10 +816,11 @@ textarea.input {
   align-items: center;
   justify-content: space-between;
   padding: 10px 14px;
-  background: var(--bg-input);
+  background: var(--bg-card);
   border: 1px solid var(--border);
   border-radius: var(--radius-sm);
   margin-bottom: 6px;
+  box-shadow: var(--shadow-sm);
 }
 
 .member-name {
@@ -818,7 +830,7 @@ textarea.input {
 
 .member-role {
   font-size: 11px;
-  color: var(--accent-light);
+  color: var(--accent);
   font-weight: 600;
 }
 
@@ -828,7 +840,7 @@ textarea.input {
   align-items: center;
   gap: 12px;
   padding: 14px;
-  background: var(--gradient-card);
+  background: var(--bg-card);
   border: 1px solid var(--border);
   border-radius: var(--radius-md);
   margin-bottom: 8px;
@@ -836,10 +848,12 @@ textarea.input {
   transition: var(--transition);
   text-decoration: none;
   color: inherit;
+  box-shadow: var(--shadow-sm);
 }
 
 .meeting-list-item:hover {
   border-color: var(--border-light);
+  box-shadow: var(--shadow-md);
   transform: translateX(4px);
 }
 
@@ -858,14 +872,14 @@ textarea.input {
 .meeting-date-badge .month {
   font-size: 10px;
   font-weight: 700;
-  color: var(--accent-light);
+  color: var(--accent);
   text-transform: uppercase;
 }
 
 .meeting-date-badge .day {
   font-size: 18px;
   font-weight: 800;
-  color: var(--accent-light);
+  color: var(--accent);
 }
 
 .meeting-list-info {
@@ -899,7 +913,7 @@ textarea.input {
 .ai-summary h4 {
   font-size: 13px;
   font-weight: 700;
-  color: var(--accent-light);
+  color: var(--accent);
   margin-bottom: 8px;
   display: flex;
   align-items: center;
@@ -959,6 +973,7 @@ textarea.input {
   background: var(--bg-card);
   color: var(--text-primary);
   font-weight: 600;
+  box-shadow: var(--shadow-sm);
 }
 
 .tab:hover:not(.active) {
@@ -983,8 +998,8 @@ textarea.input {
 }
 
 @keyframes pulse {
-  0%, 100% { box-shadow: 0 0 0 0 rgba(253, 121, 168, 0.5); }
-  50% { box-shadow: 0 0 0 12px rgba(253, 121, 168, 0); }
+  0%, 100% { box-shadow: 0 0 0 0 rgba(231, 76, 111, 0.4); }
+  50% { box-shadow: 0 0 0 12px rgba(231, 76, 111, 0); }
 }
 
 /* ===== SCROLLBAR ===== */
@@ -1030,7 +1045,7 @@ textarea.input {
 }
 
 .nav-item.active {
-  color: var(--accent-light);
+  color: var(--accent);
 }
 
 .nav-item:hover {
