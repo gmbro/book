@@ -140,6 +140,19 @@ export default function MeetingDetailPage({ params }: { params: Promise<{ id: st
 
   const addDiscussion = async () => {
     if (!currentUser || !discForm.content) return;
+    if (form.editDiscId) {
+      // 수정 모드
+      if (useLocal) {
+        const ud = discussions.map(d => d.id === form.editDiscId ? {...d, type: discForm.type, content: discForm.content} : d);
+        setDiscussions(ud); localStorage.setItem(`discussions-${id}`, JSON.stringify(ud));
+      } else {
+        await supabase.from('discussion_items').update({ type: discForm.type, content: discForm.content }).eq('id', form.editDiscId);
+        const { data } = await supabase.from('discussion_items').select('*').eq('meeting_id', id).order('created_at');
+        if (data) setDiscussions(data);
+      }
+      setForm({}); setDiscForm({ type: 'topic', content: '' }); setModal(null);
+      return;
+    }
     const item: DiscussionItem = { id: `d-${Date.now()}`, meeting_id: id, author_id: currentUser.id, type: discForm.type, content: discForm.content, created_at: new Date().toISOString() };
     if (useLocal) {
       const ud = [...discussions, item]; setDiscussions(ud);
@@ -151,6 +164,31 @@ export default function MeetingDetailPage({ params }: { params: Promise<{ id: st
     }
     setDiscForm({ type: 'topic', content: '' }); setModal(null);
   };
+
+  const deleteDiscussion = async (did: string) => {
+    if (!confirm('이 항목을 삭제하시겠습니까?')) return;
+    if (useLocal) {
+      const ud = discussions.filter(d => d.id !== did);
+      setDiscussions(ud); localStorage.setItem(`discussions-${id}`, JSON.stringify(ud));
+    } else {
+      await supabase.from('discussion_items').delete().eq('id', did);
+      const { data } = await supabase.from('discussion_items').select('*').eq('meeting_id', id).order('created_at');
+      if (data) setDiscussions(data);
+    }
+  };
+
+  const clearAllDiscussions = async () => {
+    if (!confirm('모든 발제문을 삭제하시겠습니까?')) return;
+    if (useLocal) {
+      setDiscussions([]); localStorage.removeItem(`discussions-${id}`);
+    } else {
+      await supabase.from('discussion_items').delete().eq('meeting_id', id);
+      setDiscussions([]);
+    }
+  };
+
+  // form state for edit
+  const [form, setForm] = useState<Record<string, string>>({});
 
   const saveRecord = async (content?: string) => {
     const c = content ?? recContent;
@@ -294,13 +332,24 @@ export default function MeetingDetailPage({ params }: { params: Promise<{ id: st
           <div className="section">
             <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:'10px'}}>
               <div className="section-title" style={{marginBottom:0}}>{Icons.chat} 발제문 · 질문</div>
-              <button className="btn btn-sm btn-outline" onClick={() => { setDiscForm({ type: 'topic', content: '' }); setModal('disc'); }}>+ 추가</button>
+              <div style={{display:'flex',gap:'4px'}}>
+                {discussions.length > 0 && (
+                  <button className="btn-danger-sm" style={{fontSize:'10px',padding:'2px 8px'}} onClick={clearAllDiscussions}>전체 삭제</button>
+                )}
+                <button className="btn btn-sm btn-outline" onClick={() => { setForm({}); setDiscForm({ type: 'topic', content: '' }); setModal('disc'); }}>+ 추가</button>
+              </div>
             </div>
             {discussions.length > 0 ? discussions.map(d => (
-              <div key={d.id} className="disc-item">
+              <div key={d.id} className="disc-item" style={{position:'relative'}}>
                 <div className={`disc-type ${d.type}`}>{d.type === 'topic' ? '발제문' : '질문'}</div>
                 <div className="disc-content">{d.content}</div>
-                <div className="disc-meta">{getName(d.author_id)}</div>
+                <div style={{display:'flex',justifyContent:'space-between',alignItems:'center'}}>
+                  <div className="disc-meta">{getName(d.author_id)}</div>
+                  <div style={{display:'flex',gap:'4px'}}>
+                    <button className="del-btn" title="수정" onClick={() => { setForm({editDiscId:d.id}); setDiscForm({type:d.type as 'topic'|'question',content:d.content}); setModal('disc'); }}>{Icons.edit}</button>
+                    <button className="del-btn" onClick={() => deleteDiscussion(d.id)}>✕</button>
+                  </div>
+                </div>
               </div>
             )) : <div className="empty">아직 발제문이 없습니다</div>}
           </div>
@@ -367,14 +416,14 @@ export default function MeetingDetailPage({ params }: { params: Promise<{ id: st
       {/* 발제문 모달 */}
       {modal === 'disc' && (
         <div className="overlay" onClick={() => setModal(null)}><div className="modal" onClick={e => e.stopPropagation()}>
-          <h2>발제문 · 질문 추가</h2>
+          <h2>{form.editDiscId ? '발제문 · 질문 수정' : '발제문 · 질문 추가'}</h2>
           <div className="form-group"><label className="form-label">유형</label>
             <select className="input" value={discForm.type} onChange={e => setDiscForm({...discForm, type: e.target.value as 'topic' | 'question'})}>
               <option value="topic">발제문</option><option value="question">질문</option>
             </select>
           </div>
           <div className="form-group"><label className="form-label">내용</label><textarea className="input" placeholder="내용을 입력해주세요" value={discForm.content} onChange={e => setDiscForm({...discForm, content: e.target.value})} /></div>
-          <div className="modal-btns"><button className="btn btn-outline" style={{flex:1}} onClick={() => setModal(null)}>취소</button><button className="btn btn-accent" style={{flex:1}} onClick={addDiscussion}>추가</button></div>
+          <div className="modal-btns"><button className="btn btn-outline" style={{flex:1}} onClick={() => setModal(null)}>취소</button><button className="btn btn-accent" style={{flex:1}} onClick={addDiscussion}>{form.editDiscId ? '수정' : '추가'}</button></div>
         </div></div>
       )}
       {/* AI 로딩 */}
