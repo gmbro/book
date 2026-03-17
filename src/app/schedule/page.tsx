@@ -672,9 +672,6 @@ export default function SchedulePage() {
         {/* 하단 버튼 */}
         <div style={{display:'flex',flexDirection:'column',gap:'6px',marginTop:'12px'}}>
           <button className="btn btn-accent btn-full" style={{gap:'6px'}} onClick={() => { setForm({}); setModal('poll'); }}>{Icons.poll} 일정 투표하기</button>
-          {isLeader && (
-            <button className="btn btn-outline btn-full" style={{gap:'6px'}} onClick={() => setModal('members')}>{Icons.users} 모임원 관리</button>
-          )}
         </div>
       </div>
 
