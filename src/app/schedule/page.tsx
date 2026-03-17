@@ -196,12 +196,18 @@ export default function SchedulePage() {
 
   const handleAddProposal = async () => {
     if (!user || !form.title) return;
-    const dates = form.dates ? (form.dates as string).split(',').map((d: string) => d.trim()).filter(Boolean) : [];
+    const entries = (form.entries || []) as {date:string;time:string}[];
+    if (entries.length === 0) { alert('날짜를 1개 이상 추가해주세요.'); return; }
+    const summary = entries.map((e:{date:string;time:string}) => `${e.date} ${e.time}`).join(', ');
+    if (!confirm(`\n다음 날짜로 등록하시겠습니까?\n\n${summary}`)) return;
+    const dates = entries.map((e:{date:string;time:string}) => e.date);
+    const timeStr = entries.map((e:{date:string;time:string}) => `${e.date} ${e.time}`).join(' / ');
+    const desc = form.desc ? `${form.desc}\n\n일정: ${timeStr}` : `일정: ${timeStr}`;
     if (useLocal) {
-      const np: ProposalWithVotes = { id: `p-${Date.now()}`, title: form.title, description: form.desc || null, proposed_by: user.id, dates, created_at: '', votes: [], proposerName: user.name, deadline: form.deadline || undefined };
+      const np: ProposalWithVotes = { id: `p-${Date.now()}`, title: form.title, description: desc, proposed_by: user.id, dates, created_at: '', votes: [], proposerName: user.name, deadline: form.deadline || undefined };
       const up = [...proposals, np]; setProposals(up); saveProposals(up);
     } else {
-      await supabase.from('schedule_proposals').insert({ title: form.title, description: form.desc, proposed_by: user.id, dates }); init();
+      await supabase.from('schedule_proposals').insert({ title: form.title, description: desc, proposed_by: user.id, dates }); init();
     }
     setForm({}); setModal(null);
   };
@@ -418,19 +424,46 @@ export default function SchedulePage() {
 
         {/* 일정 제안 버튼 (최하단) */}
         <div style={{display:'flex',gap:'6px',marginTop:'12px'}}>
-          <button className="btn btn-accent btn-full" onClick={() => { setForm({}); setModal('propose'); }}>+ 일정 제안하기</button>
+          <button className="btn btn-accent btn-full" onClick={() => { setForm({entries:[{date:'',time:'오후 3시'}]}); setModal('propose'); }}>+ 일정 제안하기</button>
         </div>
       </div>
 
       {/* ===== 모달들 ===== */}
       {modal === 'propose' && (
-        <div className="overlay" onClick={() => setModal(null)}><div className="modal" onClick={e => e.stopPropagation()}>
+        <div className="overlay" onClick={() => setModal(null)}><div className="modal" onClick={e => e.stopPropagation()} style={{maxHeight:'85vh',overflow:'auto'}}>
           <h2>일정 제안하기</h2>
           <div className="form-group"><label className="form-label">제안 제목</label><input className="input" placeholder="예: 5월~8월 매월 첫째 토요일" value={form.title||''} onChange={e => setForm({...form,title:e.target.value})} /></div>
-          <div className="form-group"><label className="form-label">설명</label><textarea className="input" placeholder="설명" value={form.desc||''} onChange={e => setForm({...form,desc:e.target.value})} /></div>
-          <div className="form-group"><label className="form-label">날짜 (YYYY-MM-DD, 쉼표 구분)</label><input className="input" placeholder="예: 2026-05-02, 2026-06-06" value={form.dates||''} onChange={e => setForm({...form,dates:e.target.value})} /></div>
-          <div className="form-group"><label className="form-label">투표 마감일</label><input className="input" type="date" value={form.deadline||''} onChange={e => setForm({...form,deadline:e.target.value})} /></div>
-          <div className="modal-btns"><button className="btn btn-outline" style={{flex:1}} onClick={() => setModal(null)}>취소</button><button className="btn btn-accent" style={{flex:1}} onClick={handleAddProposal}>제안하기</button></div>
+          <div className="form-group"><label className="form-label">설명 (선택)</label><textarea className="input" placeholder="설명" value={form.desc||''} onChange={e => setForm({...form,desc:e.target.value})} /></div>
+          
+          {/* 날짜+시간 입력 영역 */}
+          <div className="form-group">
+            <label className="form-label">모임 날짜 및 시간</label>
+            {((form.entries || []) as {date:string;time:string}[]).map((entry: {date:string;time:string}, idx: number) => (
+              <div key={idx} style={{display:'flex',gap:'6px',alignItems:'center',marginBottom:'6px'}}>
+                <input className="input" type="date" style={{flex:1}} value={entry.date} onChange={e => {
+                  const entries = [...((form.entries || []) as {date:string;time:string}[])];
+                  entries[idx] = {...entries[idx], date: e.target.value};
+                  setForm({...form, entries});
+                }} />
+                <input className="input" style={{width:'100px'}} placeholder="예: 오후 3시" value={entry.time} onChange={e => {
+                  const entries = [...((form.entries || []) as {date:string;time:string}[])];
+                  entries[idx] = {...entries[idx], time: e.target.value};
+                  setForm({...form, entries});
+                }} />
+                <button className="del-btn" onClick={() => {
+                  const entries = ((form.entries || []) as {date:string;time:string}[]).filter((_: {date:string;time:string}, i: number) => i !== idx);
+                  setForm({...form, entries});
+                }}>✕</button>
+              </div>
+            ))}
+            <button className="btn btn-outline btn-full" style={{fontSize:'12px',padding:'7px'}} onClick={() => {
+              const entries = [...((form.entries || []) as {date:string;time:string}[]), {date:'',time:'오후 3시'}];
+              setForm({...form, entries});
+            }}>+ 추가</button>
+          </div>
+
+          <div className="form-group"><label className="form-label">투표 마감일 (선택)</label><input className="input" type="date" value={form.deadline||''} onChange={e => setForm({...form,deadline:e.target.value})} /></div>
+          <div className="modal-btns"><button className="btn btn-outline" style={{flex:1}} onClick={() => setModal(null)}>취소</button><button className="btn btn-accent" style={{flex:1}} onClick={handleAddProposal}>확인</button></div>
         </div></div>
       )}
       {modal === 'confirm' && (
