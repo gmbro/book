@@ -558,6 +558,34 @@ export default function SchedulePage() {
           </div>
         )}
 
+        {/* 다음 모임 */}
+        {meetings.length > 0 && (
+          <div className="section">
+            <div className="section-title">{Icons.calendar} 다음 모임</div>
+            {meetings.map(m => (
+              <div key={m.id} className="meeting-item" onClick={() => router.push(`/meeting/${m.id}`)}>
+                <div className="meeting-badge">
+                  <span className="mm">{m.date ? new Date(m.date+'T00:00:00').toLocaleDateString('ko',{month:'short'}) : ''}</span>
+                  <span className="dd">{m.date ? new Date(m.date+'T00:00:00').getDate() : '?'}</span>
+                </div>
+                <div className="meeting-info">
+                  <h4>{m.date ? new Date(m.date+'T00:00:00').toLocaleDateString('ko',{month:'long',day:'numeric',weekday:'short'}) : '미정'}</h4>
+                  <p>{m.time||'시간 미정'} · {m.book_title||'도서 미선정'}</p>
+                </div>
+                <div style={{display:'flex',alignItems:'center',gap:'4px',flexWrap:'wrap'}}>
+                  {m.status==='completed' && <span className="badge badge-completed">완료</span>}
+                  {isLeader && (
+                    <>
+                      <button className="btn-danger-sm" style={{fontSize:'10px',padding:'2px 8px',background:'var(--bg-input)',color:'var(--text-sub)',border:'1px solid var(--border)'}} onClick={(e) => { e.stopPropagation(); setForm({editMeetingId:m.id,date:m.date||'',time:m.time||'',bookTitle:m.book_title||''}); setModal('editMeeting'); }}>수정</button>
+                      <button className="btn-danger-sm" style={{fontSize:'10px',padding:'2px 6px'}} onClick={(e) => { e.stopPropagation(); handleDeleteMeeting(m.id); }}>삭제</button>
+                    </>
+                  )}
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+
         {/* 달력 */}
         <Calendar proposedDates={proposedDates} confirmedDates={confirmedDates} onDateClick={handleCalendarDateClick} />
 
@@ -636,34 +664,6 @@ export default function SchedulePage() {
           })}
 
         </div>
-
-        {/* 다음 모임 */}
-        {meetings.length > 0 && (
-          <div className="section">
-            <div className="section-title">{Icons.calendar} 다음 모임</div>
-            {meetings.map(m => (
-              <div key={m.id} className="meeting-item" onClick={() => router.push(`/meeting/${m.id}`)}>
-                <div className="meeting-badge">
-                  <span className="mm">{m.date ? new Date(m.date+'T00:00:00').toLocaleDateString('ko',{month:'short'}) : ''}</span>
-                  <span className="dd">{m.date ? new Date(m.date+'T00:00:00').getDate() : '?'}</span>
-                </div>
-                <div className="meeting-info">
-                  <h4>{m.date ? new Date(m.date+'T00:00:00').toLocaleDateString('ko',{month:'long',day:'numeric',weekday:'short'}) : '미정'}</h4>
-                  <p>{m.time||'시간 미정'} · {m.book_title||'도서 미선정'}</p>
-                </div>
-                <div style={{display:'flex',alignItems:'center',gap:'4px',flexWrap:'wrap'}}>
-                  {m.status==='completed' && <span className="badge badge-completed">완료</span>}
-                  {isLeader && (
-                    <>
-                      <button className="btn-danger-sm" style={{fontSize:'10px',padding:'2px 8px',background:'var(--bg-input)',color:'var(--text-sub)',border:'1px solid var(--border)'}} onClick={(e) => { e.stopPropagation(); setForm({editMeetingId:m.id,date:m.date||'',time:m.time||'',bookTitle:m.book_title||''}); setModal('editMeeting'); }}>수정</button>
-                      <button className="btn-danger-sm" style={{fontSize:'10px',padding:'2px 6px'}} onClick={(e) => { e.stopPropagation(); handleDeleteMeeting(m.id); }}>삭제</button>
-                    </>
-                  )}
-                </div>
-              </div>
-            ))}
-          </div>
-        )}
 
         {/* 투표 섹션 - 카카오톡 스타일 */}
         <div className="section">
