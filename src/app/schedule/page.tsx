@@ -94,6 +94,7 @@ export default function SchedulePage() {
   const [detailTab, setDetailTab] = useState<'book'|'disc'|'rec'>('book');
   const [discussions, setDiscussions] = useState<DiscussionItem[]>([]);
   const [record, setRecord] = useState<MeetingRecord | null>(null);
+  const [currentBook, setCurrentBook] = useState<{title:string|null,author:string|null}>({title:null,author:null});
 
   // 모달
   const [modal, setModal] = useState<string | null>(null);
@@ -164,6 +165,13 @@ export default function SchedulePage() {
     if (sm) setMeetings(JSON.parse(sm));
     const ml = localStorage.getItem('membersList');
     if (ml) setMembers(JSON.parse(ml));
+    // 모임 상세 데이터 로드 (공유)
+    const cb = localStorage.getItem('currentBook');
+    if (cb) setCurrentBook(JSON.parse(cb));
+    const sd = localStorage.getItem('discussions-shared');
+    if (sd) setDiscussions(JSON.parse(sd));
+    const sr = localStorage.getItem('record-shared');
+    if (sr) setRecord(JSON.parse(sr));
   };
 
   const saveProposals = useCallback((p: ProposalWithVotes[]) => { if (useLocal) localStorage.setItem('proposals', JSON.stringify(p)); }, [useLocal]);
@@ -239,31 +247,37 @@ export default function SchedulePage() {
   };
 
   const saveBook = async () => {
-    if (!selectedMeeting) return;
-    const up = { ...selectedMeeting, book_title: form.bookTitle || null, book_author: form.bookAuthor || null };
-    setSelectedMeeting(up);
-    if (useLocal) {
-      const um = meetings.map(m => m.id === up.id ? up : m); setMeetings(um); saveMeetings(um);
-    } else { await supabase.from('meetings').update({ book_title: form.bookTitle, book_author: form.bookAuthor }).eq('id', up.id); }
+    const book = {title: form.bookTitle || null, author: form.bookAuthor || null};
+    setCurrentBook(book);
+    if (useLocal) localStorage.setItem('currentBook', JSON.stringify(book));
+    if (selectedMeeting) {
+      const up = { ...selectedMeeting, book_title: book.title, book_author: book.author };
+      setSelectedMeeting(up);
+      if (useLocal) { const um = meetings.map(m => m.id === up.id ? up : m); setMeetings(um); saveMeetings(um); }
+      else { await supabase.from('meetings').update({ book_title: book.title, book_author: book.author }).eq('id', up.id); }
+    }
     setModal(null);
   };
 
   const addDiscussion = async () => {
-    if (!user || !form.discContent || !selectedMeeting) return;
-    const item: DiscussionItem = { id: `d-${Date.now()}`, meeting_id: selectedMeeting.id, author_id: user.id, type: (form.discType as 'topic'|'question') || 'topic', content: form.discContent, created_at: '' };
+    if (!user || !form.discContent) return;
+    const mid = selectedMeeting?.id || 'shared';
+    const item: DiscussionItem = { id: `d-${Date.now()}`, meeting_id: mid, author_id: user.id, type: (form.discType as 'topic'|'question') || 'topic', content: form.discContent, created_at: '' };
     const ud = [...discussions, item]; setDiscussions(ud);
-    if (useLocal) localStorage.setItem(`discussions-${selectedMeeting.id}`, JSON.stringify(ud));
-    else await supabase.from('discussion_items').insert({ meeting_id: selectedMeeting.id, author_id: user.id, type: form.discType || 'topic', content: form.discContent });
+    if (useLocal) localStorage.setItem(`discussions-${mid}`, JSON.stringify(ud));
+    else if (selectedMeeting) await supabase.from('discussion_items').insert({ meeting_id: selectedMeeting.id, author_id: user.id, type: form.discType || 'topic', content: form.discContent });
     setForm({}); setModal(null);
   };
 
   const saveRecord = async () => {
-    if (!selectedMeeting) return;
-    const r: MeetingRecord = { id: record?.id || `r-${Date.now()}`, meeting_id: selectedMeeting.id, content: form.recContent || null, audio_url: audioUrl, ai_summary: record?.ai_summary || null, created_at: '' };
+    const mid = selectedMeeting?.id || 'shared';
+    const r: MeetingRecord = { id: record?.id || `r-${Date.now()}`, meeting_id: mid, content: form.recContent || null, audio_url: audioUrl, ai_summary: record?.ai_summary || null, created_at: '' };
     setRecord(r);
-    if (useLocal) localStorage.setItem(`record-${selectedMeeting.id}`, JSON.stringify(r));
-    else if (record?.id) await supabase.from('meeting_records').update({ content: form.recContent }).eq('id', record.id);
-    else await supabase.from('meeting_records').insert({ meeting_id: selectedMeeting.id, content: form.recContent, audio_url: audioUrl });
+    if (useLocal) localStorage.setItem(`record-${mid}`, JSON.stringify(r));
+    else if (selectedMeeting) {
+      if (record?.id) await supabase.from('meeting_records').update({ content: form.recContent }).eq('id', record.id);
+      else await supabase.from('meeting_records').insert({ meeting_id: selectedMeeting.id, content: form.recContent, audio_url: audioUrl });
+    }
     setModal(null);
   };
 
@@ -563,16 +577,80 @@ export default function SchedulePage() {
           </div>
         </div>
 
-        {/* 모임원 섹션 (간단히) */}
+        {/* ===== 모임 상세 (항상 표시) ===== */}
         <div className="section">
-          <div className="section-title">{Icons.users} 모임원 ({members.length}명)</div>
-          <div style={{display:'flex',flexWrap:'wrap',gap:'4px'}}>
-            {members.map(m => (
-              <span key={m.id} className="vote-member-tag" style={{fontSize:'12px'}}>
-                {m.name}{m.role==='leader' ? ' ★' : ''}
-              </span>
-            ))}
+          <div className="tabs">
+            <button className={`tab ${detailTab==='book'?'on':''}`} onClick={() => setDetailTab('book')}>도서</button>
+            <button className={`tab ${detailTab==='disc'?'on':''}`} onClick={() => setDetailTab('disc')}>발제문</button>
+            <button className={`tab ${detailTab==='rec'?'on':''}`} onClick={() => setDetailTab('rec')}>기록</button>
           </div>
+
+          {detailTab === 'book' && (
+            <>
+              <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:'10px'}}>
+                <div className="section-title" style={{marginBottom:0}}>{Icons.book} 선정 도서</div>
+                <button className="btn btn-sm btn-outline" onClick={() => { setForm({bookTitle:currentBook.title||'',bookAuthor:currentBook.author||''}); setModal('book'); }}>
+                  {currentBook.title ? '수정' : '선정하기'}
+                </button>
+              </div>
+              {currentBook.title ? (
+                <div className="book-box">
+                  <div style={{fontSize:'14px',marginBottom:'2px'}}>{currentBook.title}</div>
+                  <div style={{fontSize:'12px',color:'var(--text-muted)'}}>{currentBook.author||'저자 미상'}</div>
+                </div>
+              ) : <div className="empty">아직 도서가 선정되지 않았습니다</div>}
+            </>
+          )}
+
+          {detailTab === 'disc' && (
+            <>
+              <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:'10px'}}>
+                <div className="section-title" style={{marginBottom:0}}>{Icons.chat} 발제문 · 질문</div>
+                <button className="btn btn-sm btn-outline" onClick={() => { setForm({discType:'topic',discContent:''}); setModal('disc'); }}>+ 추가</button>
+              </div>
+              {discussions.length > 0 ? discussions.map(d => (
+                <div key={d.id} className="disc-item">
+                  <div className={`disc-type ${d.type}`}>{d.type==='topic'?'발제문':'질문'}</div>
+                  <div className="disc-content">{d.content}</div>
+                  <div className="disc-meta">{getName(d.author_id)}</div>
+                </div>
+              )) : <div className="empty">아직 발제문이 없습니다</div>}
+            </>
+          )}
+
+          {detailTab === 'rec' && (
+            <>
+              <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:'10px'}}>
+                <div className="section-title" style={{marginBottom:0}}>{Icons.edit} 모임 기록</div>
+                <button className="btn btn-sm btn-outline" onClick={() => { setForm({recContent:record?.content||''}); setModal('rec'); }}>
+                  {record?.content ? '수정' : '기록하기'}
+                </button>
+              </div>
+              {record?.content ? <div style={{fontSize:'13px',lineHeight:'1.7',whiteSpace:'pre-wrap',padding:'10px',background:'var(--bg-input)',borderRadius:'var(--r-sm)',border:'1px solid var(--border)'}}>{record.content}</div> : <div className="empty" style={{marginBottom:'10px'}}>아직 기록이 없습니다</div>}
+
+              <div className="recorder" style={{marginTop:'10px',marginBottom:'10px'}}>
+                <div style={{fontSize:'12px',color:'var(--text-sub)',marginBottom:'8px',display:'flex',alignItems:'center',gap:'6px'}}>{Icons.mic} 음성 녹음</div>
+                <div className="rec-controls">
+                  <button className={`rec-btn ${isRec?'on':''}`} onClick={isRec ? stopRec : startRec}>{isRec ? '⏹' : '●'}</button>
+                  <div>
+                    <div className="rec-status">{isRec ? '녹음 중...' : '대기'}</div>
+                    <div className="rec-time">{fmtTime(recTime)}</div>
+                  </div>
+                </div>
+                {audioUrl && <audio src={audioUrl} controls style={{width:'100%',marginTop:'8px'}} />}
+              </div>
+
+              <div className="ai-box">
+                <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:'6px'}}>
+                  <h4>{Icons.star} AI 요약</h4>
+                  <button className="btn btn-sm btn-accent" onClick={doSummary} disabled={summaryLoading}>{summaryLoading ? '생성 중...' : '요약 생성'}</button>
+                </div>
+                {record?.ai_summary ? (
+                  <div style={{fontSize:'13px',lineHeight:'1.7',color:'var(--text-sub)'}} dangerouslySetInnerHTML={{__html: record.ai_summary.replace(/\n/g,'<br/>')}} />
+                ) : <div style={{fontSize:'12px',color:'var(--text-muted)'}}>기록을 기반으로 AI 요약을 생성하세요</div>}
+              </div>
+            </>
+          )}
         </div>
       </div>
 
