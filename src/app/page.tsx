@@ -74,7 +74,20 @@ export default function Home() {
 
   return (
     <div className="select-page">
-      <h1>1+1 독서모임</h1>
+      <div style={{display:'flex',alignItems:'center',gap:'8px',position:'relative'}}>
+        <h1>1+1 독서모임</h1>
+        <div className="help-wrap">
+          <span className="help-icon">?</span>
+          <div className="help-tooltip">
+            <b>사용 가이드</b>
+            <p>1. 본인을 선택하면 모임 일정 페이지로 이동해요</p>
+            <p>2. 제안된 일정에 참여 가능/불가능을 투표해요</p>
+            <p>3. <span style={{color:'#7c6cf7',fontWeight:600}}>일정 확정은 모임장만</span> 할 수 있어요</p>
+            <p>4. 달력의 <span style={{color:'#2ecc71',fontWeight:600}}>초록 날짜</span> 클릭 → 모임 상세 페이지</p>
+            <p>5. 모임 상세에서 도서 검색, 기록, 음성 녹음이 가능해요</p>
+          </div>
+        </div>
+      </div>
       <p className="desc">본인 선택 후 독서 모임일정을 확인해주세요</p>
       <div className="user-grid">
         {members.map(m => (

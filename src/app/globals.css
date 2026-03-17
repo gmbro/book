@@ -394,6 +394,29 @@ html, body {
   color: var(--accent);
 }
 
+/* ===== HELP TOOLTIP ===== */
+.help-wrap { position: relative; display: inline-flex; }
+.help-icon {
+  width: 22px; height: 22px; border-radius: 50%;
+  background: var(--accent-soft); color: var(--accent);
+  display: flex; align-items: center; justify-content: center;
+  font-size: 12px; font-weight: 700; cursor: help;
+  border: 1px solid rgba(124,108,247,0.2);
+  transition: all 0.15s;
+}
+.help-icon:hover { background: var(--accent); color: #fff; }
+.help-tooltip {
+  display: none; position: absolute; top: 32px; left: 50%;
+  transform: translateX(-50%); z-index: 300;
+  background: var(--bg-card); border: 1px solid var(--border);
+  border-radius: var(--r); padding: 14px 16px;
+  box-shadow: var(--shadow-md); width: 280px;
+  animation: fadeIn 0.15s;
+}
+.help-tooltip b { font-size: 13px; display: block; margin-bottom: 8px; color: var(--text); }
+.help-tooltip p { font-size: 11px; color: var(--text-sub); line-height: 1.7; margin: 0; }
+.help-wrap:hover .help-tooltip { display: block; }
+
 .select-page .desc {
   font-size: 13px;
   color: var(--text-muted);
