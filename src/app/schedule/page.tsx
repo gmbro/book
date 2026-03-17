@@ -102,7 +102,7 @@ export default function SchedulePage() {
     if (!u) { router.push('/'); return; }
     setUser(JSON.parse(u));
     init();
-    // 가이드 팔업 (최초 1회)
+    // 가이드 팝업 (최초 1회)
     if (!localStorage.getItem('guideShown')) {
       setShowGuide(true);
       localStorage.setItem('guideShown', 'true');
@@ -470,10 +470,10 @@ export default function SchedulePage() {
           <h2>1+1 독서모임 사용 가이드</h2>
           <div style={{fontSize:'13px',lineHeight:'1.8',color:'var(--text-sub)'}}>
             <p><b>1. 일정 투표</b> — 제안된 일정에 참여 가능/불가능을 투표해요</p>
-            <p><b>2. 일정 확정</b> — 투표 결과를 보고 상단 "확정" 버튼으로 날짜를 확정해요</p>
-            <p><b>3. 모임 상세</b> — 달력에서 <span style={{color:'var(--green)',fontWeight:600}}>초록색 날짜</span>를 클릭하면 모임 상세가 열려요</p>
-            <p style={{paddingLeft:'16px'}}>• 도서 선정, 발제문 작성, 모임 기록, AI 요약</p>
-            <p><b>4. 미참여 알림</b> — 투표하지 않은 사람에게 알림을 보낼 수 있어요</p>
+            <p><b>2. 일정 확정</b> — 모임장이 카드 하단 "확정하기" 버튼으로 날짜를 확정해요</p>
+            <p><b>3. 모임 상세</b> — 달력에서 <span style={{color:'var(--green)',fontWeight:600}}>초록색 날짜</span>를 클릭하거나 모임 기록 리스트를 클릭하면 상세 페이지가 열려요</p>
+            <p style={{paddingLeft:'16px'}}>• 도서 검색/선정, 발제문 작성, 수기 기록, 음성 녹음, AI 요약</p>
+            <p><b>4. 미참여 알림</b> — 투표하지 않은 분에게 독려 메시지를 보낼 수 있어요</p>
             <p><b>5. 반복</b> — 확정 후 다음 모임을 바로 제안할 수 있어요</p>
           </div>
           <div className="modal-btns"><button className="btn btn-accent btn-full" onClick={() => setShowGuide(false)}>확인</button></div>

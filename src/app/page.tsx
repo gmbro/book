@@ -75,7 +75,7 @@ export default function Home() {
   return (
     <div className="select-page">
       <h1>1+1 독서모임</h1>
-      <p className="desc">참여자를 선택해주세요</p>
+      <p className="desc">본인 선택 후 독서 모임일정을 확인해주세요</p>
       <div className="user-grid">
         {members.map(m => (
           <div key={m.id} style={{position:'relative'}}>
