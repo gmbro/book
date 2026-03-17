@@ -363,20 +363,14 @@ export default function SchedulePage() {
   /* ===== 메인 원페이지 ===== */
   return (
     <div className="app">
-      <div className="header" style={{padding:'10px 16px'}}>
-        <button className="back-btn" style={{width:'30px',height:'30px',fontSize:'14px'}} onClick={() => router.push('/')}>←</button>
-        <div style={{flex:1}}>
-          <h1 style={{fontSize:'15px'}}>1+1 독서모임</h1>
-          <span className="header-sub">{user?.name}님, 반가워요</span>
-        </div>
-        <button className="icon-btn" style={{width:'30px',height:'30px'}} onClick={() => setModal('members')} title="모임원 관리">{Icons.users}</button>
-      </div>
-
       <div className="content">
-        {/* 일정 제안/확정 버튼 (달력 상단) */}
-        <div style={{display:'flex',gap:'6px',marginBottom:'12px'}}>
-          <button className="btn btn-accent btn-full" onClick={() => { setForm({}); setModal('propose'); }}>+ 일정 제안하기</button>
-          <button className="btn btn-green" onClick={() => { setForm({}); setModal('confirm'); }}>확정</button>
+        {/* 환영 문구 + 뒤로가기 */}
+        <div style={{display:'flex',alignItems:'center',gap:'10px',marginBottom:'12px'}}>
+          <button className="back-btn" style={{width:'30px',height:'30px',fontSize:'14px'}} onClick={() => router.push('/')}>←</button>
+          <div>
+            <div style={{fontSize:'15px',fontWeight:600}}>1+1 독서모임</div>
+            <div style={{fontSize:'12px',color:'var(--text-muted)'}}>{user?.name}님, 반가워요</div>
+          </div>
         </div>
 
         {/* 달력 */}
@@ -556,6 +550,12 @@ export default function SchedulePage() {
             )}
           </div>
         )}
+
+        {/* 일정 제안/확정 버튼 (최하단) */}
+        <div style={{display:'flex',gap:'6px',marginTop:'12px'}}>
+          <button className="btn btn-accent btn-full" onClick={() => { setForm({}); setModal('propose'); }}>+ 일정 제안하기</button>
+          <button className="btn btn-green" onClick={() => { setForm({}); setModal('confirm'); }}>확정</button>
+        </div>
       </div>
 
       {/* ===== 모달들 ===== */}
