@@ -116,6 +116,7 @@ CREATE TABLE book_reviews (
   meeting_id UUID NOT NULL REFERENCES meetings(id) ON DELETE CASCADE,
   author_id UUID NOT NULL REFERENCES members(id) ON DELETE CASCADE,
   content TEXT NOT NULL,
+  image_url TEXT,
   created_at TIMESTAMPTZ DEFAULT NOW(),
   updated_at TIMESTAMPTZ DEFAULT NOW(),
   UNIQUE(meeting_id, author_id)
@@ -123,3 +124,27 @@ CREATE TABLE book_reviews (
 
 ALTER TABLE book_reviews ENABLE ROW LEVEL SECURITY;
 CREATE POLICY "Allow all for book_reviews" ON book_reviews FOR ALL USING (true) WITH CHECK (true);
+
+-- 독후감 좋아요
+CREATE TABLE review_likes (
+  id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+  review_id UUID NOT NULL REFERENCES book_reviews(id) ON DELETE CASCADE,
+  member_id UUID NOT NULL REFERENCES members(id) ON DELETE CASCADE,
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  UNIQUE(review_id, member_id)
+);
+
+ALTER TABLE review_likes ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "Allow all for review_likes" ON review_likes FOR ALL USING (true) WITH CHECK (true);
+
+-- 독후감 댓글
+CREATE TABLE review_comments (
+  id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+  review_id UUID NOT NULL REFERENCES book_reviews(id) ON DELETE CASCADE,
+  member_id UUID NOT NULL REFERENCES members(id) ON DELETE CASCADE,
+  content TEXT NOT NULL,
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+ALTER TABLE review_comments ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "Allow all for review_comments" ON review_comments FOR ALL USING (true) WITH CHECK (true);

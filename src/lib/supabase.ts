@@ -103,6 +103,22 @@ export interface BookReview {
   meeting_id: string;
   author_id: string;
   content: string;
+  image_url: string | null;
   created_at: string;
   updated_at: string;
+}
+
+export interface ReviewLike {
+  id: string;
+  review_id: string;
+  member_id: string;
+  created_at: string;
+}
+
+export interface ReviewComment {
+  id: string;
+  review_id: string;
+  member_id: string;
+  content: string;
+  created_at: string;
 }
