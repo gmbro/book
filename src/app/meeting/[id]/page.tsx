@@ -87,6 +87,23 @@ export default function MeetingDetailPage({ params }: { params: Promise<{ id: st
     if (!meeting?.book_title) { alert('도서 선정부터 해주세요!'); return; }
     setAiReviewLoading(true);
     try {
+      // 과거 독후감 수집 (본인 글 스타일 학습용)
+      let pastReviews: string[] = [];
+      if (currentUser) {
+        if (useLocal) {
+          const allKeys = Object.keys(localStorage).filter(k => k.startsWith('book-reviews-'));
+          for (const key of allKeys) {
+            try {
+              const reviews = JSON.parse(localStorage.getItem(key) || '[]');
+              const mine = reviews.filter((r: BookReview) => r.author_id === currentUser.id);
+              pastReviews.push(...mine.map((r: BookReview) => r.content));
+            } catch { /* ignore */ }
+          }
+        } else {
+          const { data } = await supabase.from('book_reviews').select('content').eq('author_id', currentUser.id).neq('meeting_id', id).order('created_at', { ascending: false }).limit(3);
+          if (data) pastReviews = data.map(r => r.content);
+        }
+      }
       const res = await fetch('/api/generate-review', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -94,6 +111,7 @@ export default function MeetingDetailPage({ params }: { params: Promise<{ id: st
           bookTitle: meeting.book_title,
           bookAuthor: meeting.book_author,
           bookDescription: selectedBook?.description || '',
+          pastReviews: pastReviews.slice(0, 3),
         }),
       });
       const data = await res.json();
