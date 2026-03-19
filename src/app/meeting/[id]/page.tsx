@@ -574,14 +574,16 @@ export default function MeetingDetailPage({ params }: { params: Promise<{ id: st
         {/* ===== 발제문 탭 ===== */}
         {activeTab === 'disc' && (
           <div className="rec-panel">
-            {/* 쓰기 모드: 발제문이 없거나 수정 중일 때 */}
-            {(discussions.length === 0 || form.editDiscId) ? (
+            {!meeting.book_title ? (
+              <div className="empty">먼저 도서를 선정해주세요!</div>
+            ) : (discussions.length === 0 || form.editDiscId) ? (
               <>
                 <textarea
                   className="rec-textarea"
                   placeholder="발제문을 작성해주세요..."
                   value={discForm.content}
                   onChange={e => setDiscForm({...discForm, content: e.target.value})}
+                  style={{fontSize:'16px',lineHeight:'2'}}
                   autoFocus
                 />
                 <div className="rec-bottom-btns">
@@ -714,14 +716,16 @@ export default function MeetingDetailPage({ params }: { params: Promise<{ id: st
         {/* ===== 기록 탭 ===== */}
         {activeTab === 'rec' && (
           <div className="rec-panel">
-            {/* 쓰기 모드: 기록이 없거나 작성 중일 때 */}
-            {(records.length === 0 || form.editDiscId === 'rec-edit') ? (
+            {!meeting.book_title ? (
+              <div className="empty">먼저 도서를 선정해주세요!</div>
+            ) : (records.length === 0 || form.editDiscId === 'rec-edit') ? (
               <>
                 <textarea
                   className="rec-textarea"
                   placeholder="모임 내용을 자유롭게 기록해주세요..."
                   value={recContent}
                   onChange={e => setRecContent(e.target.value)}
+                  style={{fontSize:'16px',lineHeight:'2'}}
                   autoFocus
                 />
                 <div className="rec-bottom-btns">
