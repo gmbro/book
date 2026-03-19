@@ -528,27 +528,17 @@ export default function MeetingDetailPage({ params }: { params: Promise<{ id: st
   // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => { if (bookReviews.length > 0) loadLikesComments(); }, [bookReviews.length]);
 
-  // 참여자 로드 (설문 투표 자동 연동 or 수동 등록)
+  // 참여자 로드 (설문 투표에서 available로 투표한 사람들)
   useEffect(() => {
-    if (!id) return;
-    if (meeting?.proposal_id) {
-      // 설문으로 확정된 모임: available 투표자 자동 표시
-      if (useLocal) {
-        const votes = JSON.parse(localStorage.getItem(`votes-${meeting.proposal_id}`) || '[]');
-        setAttendees(votes.filter((v: {vote:string}) => v.vote === 'available').map((v: {member_id:string}) => ({ member_id: v.member_id })));
-      } else {
-        supabase.from('schedule_votes').select('member_id').eq('proposal_id', meeting.proposal_id).eq('vote', 'available').then(({ data }) => setAttendees(data || []));
-      }
+    if (!meeting?.proposal_id) { setAttendees([]); return; }
+    if (useLocal) {
+      const votes = JSON.parse(localStorage.getItem(`votes-${meeting.proposal_id}`) || '[]');
+      setAttendees(votes.filter((v: {vote:string}) => v.vote === 'available').map((v: {member_id:string}) => ({ member_id: v.member_id })));
     } else {
-      // 직접 등록된 모임: meeting_attendees에서 가져오기
-      if (useLocal) {
-        setAttendees(JSON.parse(localStorage.getItem(`meeting-attendees-${id}`) || '[]'));
-      } else {
-        supabase.from('meeting_attendees').select('member_id').eq('meeting_id', id).then(({ data }) => setAttendees(data || []));
-      }
+      supabase.from('schedule_votes').select('member_id').eq('proposal_id', meeting.proposal_id).eq('vote', 'available').then(({ data }) => setAttendees(data || []));
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [id, meeting?.proposal_id, useLocal]);
+  }, [meeting?.proposal_id, useLocal]);
 
   const toggleLike = async (reviewId: string) => {
     if (!currentUser) return;
@@ -714,31 +704,7 @@ export default function MeetingDetailPage({ params }: { params: Promise<{ id: st
                           ))}
                         </div>
                       )}
-                      {!meeting.proposal_id && (() => {
-                        const isAttending = attendees.some(a => a.member_id === currentUser?.id);
-                        return (
-                          <button
-                            onClick={async () => {
-                              if (!currentUser) return;
-                              if (isAttending) {
-                                const next = attendees.filter(a => a.member_id !== currentUser.id);
-                                setAttendees(next);
-                                if (useLocal) { localStorage.setItem(`meeting-attendees-${id}`, JSON.stringify(next)); }
-                                else { await supabase.from('meeting_attendees').delete().eq('meeting_id', id).eq('member_id', currentUser.id); }
-                              } else {
-                                const next = [...attendees, { member_id: currentUser.id }];
-                                setAttendees(next);
-                                if (useLocal) { localStorage.setItem(`meeting-attendees-${id}`, JSON.stringify(next)); }
-                                else { await supabase.from('meeting_attendees').insert({ meeting_id: id, member_id: currentUser.id }); }
-                              }
-                            }}
-                            style={{marginTop:'8px',display:'flex',alignItems:'center',gap:'5px',padding:'6px 14px',borderRadius:'8px',border:'none',cursor:'pointer',fontSize:'12px',fontWeight:600,fontFamily:'inherit',background:isAttending?'var(--bg-input)':'var(--accent)',color:isAttending?'var(--text-sub)':'white'}}
-                          >
-                            {isAttending ? <>{Icons.check} 참여 취소</> : <>{Icons.userCheck} 참여하기</>}
-                          </button>
-                        );
-                      })()}
-                      {meeting.proposal_id && attendees.length === 0 && (
+                      {attendees.length === 0 && (
                         <div style={{color:'var(--text-muted)',marginTop:'4px',fontSize:'12px'}}>설문 투표 후 자동 반영됩니다</div>
                       )}
                     </div>
