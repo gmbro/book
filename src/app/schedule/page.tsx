@@ -245,7 +245,7 @@ export default function SchedulePage() {
     const summary = entries.map((e:{date:string;time:string}) => `${e.date} ${e.time}`).join('\n');
     setConfirmAction({msg:`다음 날짜로 등록하시겠습니까?\n\n${summary}`, action: async () => {
       const newMeetings: Meeting[] = entries.map((e:{date:string;time:string}, i:number) => ({
-        id: `m-${Date.now()}-${i}`, date: e.date, time: e.time || '오후 3시', location: null, status: 'confirmed' as const, proposal_id: null, book_title: null, book_author: null, created_at: ''
+        id: `m-${Date.now()}-${i}`, date: e.date, time: e.time || '오후 3시', location: null, status: 'confirmed' as const, proposal_id: null, book_title: null, book_author: null, max_members: null, conditions: null, notice: null, created_at: ''
       }));
       if (useLocal) {
         const um = [...meetings, ...newMeetings]; setMeetings(um); saveMeetings(um);
@@ -263,7 +263,7 @@ export default function SchedulePage() {
   const handleConfirm = async () => {
     if (!form.proposal || !form.date) return;
     setConfirmAction({msg:'이번 모임은 이 일정으로 확정하시겠습니까?', action: async () => {
-      const m: Meeting = { id: `m-${Date.now()}`, date: form.date, time: form.time || '오후 3시', location: null, status: 'confirmed', proposal_id: form.proposal, book_title: null, book_author: null, created_at: '' };
+      const m: Meeting = { id: `m-${Date.now()}`, date: form.date, time: form.time || '오후 3시', location: null, status: 'confirmed', proposal_id: form.proposal, book_title: null, book_author: null, max_members: null, conditions: null, notice: null, created_at: '' };
       if (useLocal) { const um = [...meetings, m]; setMeetings(um); saveMeetings(um); }
       else { await supabase.from('meetings').insert({ date: form.date, time: form.time || '오후 3시', status: 'confirmed', proposal_id: form.proposal }); init(); }
       setForm({}); setModal(null);
