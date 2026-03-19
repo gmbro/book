@@ -429,6 +429,10 @@ export default function MeetingDetailPage({ params }: { params: Promise<{ id: st
 
   const deleteReview = async (reviewId: string) => {
     if (!confirm('독후감을 삭제하시겠습니까?')) return;
+    await doDeleteReview(reviewId);
+  };
+
+  const doDeleteReview = async (reviewId: string) => {
     if (useLocal) {
       const updated = bookReviews.filter(r => r.id !== reviewId);
       setBookReviews(updated);
@@ -437,6 +441,19 @@ export default function MeetingDetailPage({ params }: { params: Promise<{ id: st
       await supabase.from('book_reviews').delete().eq('id', reviewId);
       const { data } = await supabase.from('book_reviews').select('*').eq('meeting_id', id).order('created_at');
       if (data) setBookReviews(data);
+    }
+  };
+
+  const clearAllReviews = async () => {
+    if (!confirm('모든 독후감을 삭제하시겠습니까?')) return;
+    if (useLocal) {
+      setBookReviews([]);
+      localStorage.removeItem(`book-reviews-${id}`);
+    } else {
+      for (const r of bookReviews) {
+        await supabase.from('book_reviews').delete().eq('id', r.id);
+      }
+      setBookReviews([]);
     }
   };
 
@@ -647,6 +664,9 @@ export default function MeetingDetailPage({ params }: { params: Promise<{ id: st
                   </button>
                   {editingReview && (
                     <button className="rec-action-btn danger" onClick={() => { setEditingReview(false); setReviewContent(''); }}>취소</button>
+                  )}
+                  {bookReviews.length > 0 && (
+                    <button className="rec-action-btn danger" onClick={clearAllReviews}>모두삭제</button>
                   )}
                 </div>
               </>
