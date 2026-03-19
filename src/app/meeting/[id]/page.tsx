@@ -196,6 +196,7 @@ export default function MeetingDetailPage({ params }: { params: Promise<{ id: st
       localStorage.setItem(`book-detail-${id}`, JSON.stringify(book));
     } else {
       await supabase.from('meetings').update({ book_title: book.title, book_author: book.author }).eq('id', id);
+      localStorage.setItem(`book-detail-${id}`, JSON.stringify(book));
     }
     setModal(null);
     setBookQuery(''); setBookResults([]);
@@ -221,7 +222,20 @@ export default function MeetingDetailPage({ params }: { params: Promise<{ id: st
   useEffect(() => {
     if (meeting?.book_title && !selectedBook) {
       const stored = localStorage.getItem(`book-detail-${id}`);
-      if (stored) setSelectedBook(JSON.parse(stored));
+      if (stored) {
+        setSelectedBook(JSON.parse(stored));
+      } else {
+        // localStorage에 없으면 Google Books API로 자동 복구
+        fetch(`/api/books?q=${encodeURIComponent(meeting.book_title)}`)
+          .then(res => res.json())
+          .then(data => {
+            if (data.items?.length > 0) {
+              setSelectedBook(data.items[0]);
+              localStorage.setItem(`book-detail-${id}`, JSON.stringify(data.items[0]));
+            }
+          })
+          .catch(() => {});
+      }
       fetchBlogReviews(meeting.book_title);
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
