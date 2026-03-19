@@ -1443,3 +1443,128 @@ textarea.input { min-height: 90px; resize: vertical; }
     opacity: 0;
   }
 }
+
+/* ===== 반응형 디자인 ===== */
+
+/* 태블릿 (768px 이상) */
+@media (min-width: 768px) {
+  .app {
+    max-width: 680px;
+  }
+
+  .content {
+    padding: 24px 28px 40px;
+  }
+
+  .section {
+    padding: 20px;
+  }
+
+  /* 발제문/기록 텍스트에리어 확대 */
+  .rec-textarea {
+    max-width: 100%;
+    min-height: calc(100vh - 280px);
+    font-size: 16px;
+    padding: 20px 24px;
+  }
+
+  /* 읽기 모드 카드 */
+  .read-card {
+    padding: 20px;
+  }
+  .read-card-content {
+    font-size: 15px;
+    line-height: 1.9;
+  }
+  .read-card-author { font-size: 14px; }
+
+  /* 발제문 아이템 */
+  .disc-item {
+    padding: 14px;
+  }
+  .disc-content { font-size: 15px; }
+
+  /* 투표 카드 */
+  .poll-card {
+    margin-bottom: 14px;
+  }
+  .poll-title { font-size: 16px; }
+  .poll-desc { font-size: 14px; padding: 12px 20px 0; }
+  .poll-results { padding: 16px 20px; }
+
+  /* 모달 */
+  .modal {
+    max-width: 520px;
+    padding: 28px;
+  }
+  .modal h2 { font-size: 18px; }
+
+  /* 모임 아이템 */
+  .meeting-item { padding: 16px; }
+  .meeting-info h4 { font-size: 15px; }
+  .meeting-info p { font-size: 13px; }
+
+  /* 하단 버튼 */
+  .rec-bottom-btns {
+    max-width: 100%;
+  }
+
+  /* 탭 */
+  .tabs { margin-bottom: 20px; }
+  .tab { font-size: 14px; padding: 10px; }
+}
+
+/* 데스크탑 (1024px 이상) */
+@media (min-width: 1024px) {
+  .app {
+    max-width: 800px;
+  }
+
+  .content {
+    padding: 32px 40px 48px;
+  }
+
+  .section {
+    padding: 24px;
+    margin-bottom: 16px;
+  }
+
+  /* 발제문/기록 텍스트에리어 더 확대 */
+  .rec-textarea {
+    min-height: calc(100vh - 260px);
+    font-size: 16px;
+    padding: 24px 28px;
+    line-height: 2;
+  }
+
+  /* 읽기 모드 카드 */
+  .read-card {
+    padding: 24px;
+  }
+  .read-card-content {
+    font-size: 16px;
+    line-height: 2;
+  }
+
+  /* 투표 카드 */
+  .poll-header { padding: 18px 22px 0; }
+  .poll-title { font-size: 17px; }
+  .poll-desc { font-size: 15px; padding: 14px 22px 0; }
+  .poll-results { padding: 18px 22px; }
+  .poll-action-btn { padding: 14px; font-size: 14px; }
+
+  /* 모달 */
+  .modal {
+    max-width: 580px;
+    padding: 32px;
+  }
+
+  /* 유저 선택 */
+  .user-grid {
+    max-width: 460px;
+  }
+
+  /* 도서 상세 */
+  .book-box { padding: 16px; }
+}
+
