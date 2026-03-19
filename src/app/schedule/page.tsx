@@ -138,16 +138,7 @@ export default function SchedulePage() {
           }
           setProposals(pv);
         } else {
-          const leader = md.find(m => m.role === 'leader');
-          if (leader) {
-            for (const ip of INITIAL_PROPOSALS) {
-              await supabase.from('schedule_proposals').insert({ title: ip.title, description: ip.desc, proposed_by: leader.id, dates: ip.dates });
-            }
-          }
-          const { data: pd2 } = await supabase.from('schedule_proposals').select('*').order('created_at');
-          if (pd2) {
-            setProposals(pd2.map(p => ({ ...p, votes: [], proposerName: md.find(m => m.id === p.proposed_by)?.name || '?' })));
-          }
+          setProposals([]);
         }
         const { data: mtgs } = await supabase.from('meetings').select('*').order('date');
         if (mtgs) setMeetings(mtgs);

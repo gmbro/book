@@ -38,6 +38,34 @@ export default function MeetingDetailPage({ params }: { params: Promise<{ id: st
   const [recContent, setRecContent] = useState('');
   const [summaryLoading, setSummaryLoading] = useState(false);
   const [isListening, setIsListening] = useState(false);
+  const [aiDiscLoading, setAiDiscLoading] = useState(false);
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const [deletedDiscussions, setDeletedDiscussions] = useState<any[]>([]);
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const [deletedRecords, setDeletedRecords] = useState<any[]>([]);
+
+  const generateAiDiscussion = async () => {
+    if (!meeting?.book_title) { alert('도서 선정부터 해주세요!'); return; }
+    setAiDiscLoading(true);
+    try {
+      const res = await fetch('/api/generate-discussion', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          bookTitle: meeting.book_title,
+          bookAuthor: meeting.book_author,
+          bookDescription: selectedBook?.description || '',
+        }),
+      });
+      const data = await res.json();
+      if (data.error) {
+        alert(data.error);
+      } else if (data.discussions) {
+        setDiscForm({ ...discForm, content: data.discussions });
+      }
+    } catch { alert('AI 발제문 생성에 실패했습니다.'); }
+    setAiDiscLoading(false);
+  };
 
   // 도서 검색
   const [bookQuery, setBookQuery] = useState('');
@@ -45,7 +73,20 @@ export default function MeetingDetailPage({ params }: { params: Promise<{ id: st
   const [bookSearching, setBookSearching] = useState(false);
   const [selectedBook, setSelectedBook] = useState<BookResult | null>(null);
 
-  // 녹음
+  // 블로그 후기
+  interface BlogReview { title: string; snippet: string; blogger: string; date: string; link: string; }
+  const [blogReviews, setBlogReviews] = useState<BlogReview[]>([]);
+  const [reviewsLoading, setReviewsLoading] = useState(false);
+
+  const fetchBlogReviews = async (bookTitle: string) => {
+    setReviewsLoading(true);
+    try {
+      const res = await fetch(`/api/book-reviews?title=${encodeURIComponent(bookTitle)}`);
+      const data = await res.json();
+      setBlogReviews(data.reviews || []);
+    } catch { setBlogReviews([]); }
+    setReviewsLoading(false);
+  };
   const [isRec, setIsRec] = useState(false);
   const [recTime, setRecTime] = useState(0);
   const [recorder, setRecorder] = useState<MediaRecorder | null>(null);
@@ -120,12 +161,13 @@ export default function MeetingDetailPage({ params }: { params: Promise<{ id: st
     }
     setModal(null);
     setBookQuery(''); setBookResults([]);
+    fetchBlogReviews(book.title);
   };
 
   const clearBook = async () => {
     if (!meeting || !confirm('선정된 도서를 취소하시겠습니까?')) return;
     const up = { ...meeting, book_title: null, book_author: null };
-    setMeeting(up); setSelectedBook(null);
+    setMeeting(up); setSelectedBook(null); setBlogReviews([]);
     if (useLocal) {
       const stored = JSON.parse(localStorage.getItem('meetings') || '[]');
       const idx = stored.findIndex((m: Meeting) => m.id === id);
@@ -142,7 +184,9 @@ export default function MeetingDetailPage({ params }: { params: Promise<{ id: st
     if (meeting?.book_title && !selectedBook) {
       const stored = localStorage.getItem(`book-detail-${id}`);
       if (stored) setSelectedBook(JSON.parse(stored));
+      fetchBlogReviews(meeting.book_title);
     }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [meeting, id, selectedBook]);
 
   const addDiscussion = async () => {
@@ -186,12 +230,28 @@ export default function MeetingDetailPage({ params }: { params: Promise<{ id: st
 
   const clearAllDiscussions = async () => {
     if (!confirm('모든 발제문을 삭제하시겠습니까?')) return;
+    setDeletedDiscussions([...discussions]);
     if (useLocal) {
       setDiscussions([]); localStorage.removeItem(`discussions-${id}`);
     } else {
       await supabase.from('discussion_items').delete().eq('meeting_id', id);
       setDiscussions([]);
     }
+  };
+
+  const undoDiscussions = async () => {
+    if (deletedDiscussions.length === 0) return;
+    if (useLocal) {
+      setDiscussions(deletedDiscussions);
+      localStorage.setItem(`discussions-${id}`, JSON.stringify(deletedDiscussions));
+    } else {
+      for (const d of deletedDiscussions) {
+        await supabase.from('discussion_items').insert({ meeting_id: id, type: d.type, content: d.content, author_id: d.author_id });
+      }
+      const { data } = await supabase.from('discussion_items').select('*').eq('meeting_id', id).order('created_at');
+      if (data) setDiscussions(data);
+    }
+    setDeletedDiscussions([]);
   };
 
   // form state for edit
@@ -215,8 +275,16 @@ export default function MeetingDetailPage({ params }: { params: Promise<{ id: st
 
   const clearAllRecords = () => {
     if (!confirm('모든 기록을 삭제하시겠습니까?')) return;
+    setDeletedRecords([...records]);
     setRecords([]);
     localStorage.removeItem(`records-list-${id}`);
+  };
+
+  const undoRecords = () => {
+    if (deletedRecords.length === 0) return;
+    setRecords(deletedRecords);
+    localStorage.setItem(`records-list-${id}`, JSON.stringify(deletedRecords));
+    setDeletedRecords([]);
   };
 
   const toggleSpeech = () => {
@@ -295,24 +363,10 @@ export default function MeetingDetailPage({ params }: { params: Promise<{ id: st
     <div className="app">
       <div className="content">
         {/* 헤더 */}
-        <div style={{display:'flex',alignItems:'center',gap:'10px',marginBottom:'16px'}}>
+        <div style={{display:'flex',alignItems:'center',gap:'10px',marginBottom:'12px'}}>
           <button className="back-btn" style={{width:'30px',height:'30px',fontSize:'14px'}} onClick={() => router.push('/schedule')}>←</button>
-          <div style={{flex:1}}>
-            <div style={{fontSize:'15px',fontWeight:600}}>모임 상세</div>
-            <div style={{fontSize:'12px',color:'var(--text-muted)'}}>
-              {meeting.date ? new Date(meeting.date + 'T00:00:00').toLocaleDateString('ko', { year: 'numeric', month: 'long', day: 'numeric', weekday: 'short' }) : '날짜 미정'}
-            </div>
-          </div>
-          <span className={`badge ${meeting.status === 'completed' ? 'badge-completed' : 'badge-green'}`}>
-            {meeting.status === 'confirmed' ? '확정' : '완료'}
-          </span>
-        </div>
-
-        {/* 기본 정보 */}
-        <div className="section">
-          <div style={{fontSize:'12px',color:'var(--text-muted)',marginBottom:'3px'}}>일시</div>
           <div style={{fontSize:'14px',fontWeight:600}}>
-            {meeting.date ? new Date(meeting.date + 'T00:00:00').toLocaleDateString('ko', { year: 'numeric', month: 'long', day: 'numeric', weekday: 'short' }) : '미정'} {meeting.time || ''}
+            {meeting.date ? new Date(meeting.date + 'T00:00:00').toLocaleDateString('ko', { year: 'numeric', month: 'long', day: 'numeric', weekday: 'short' }) : '날짜 미정'} {meeting.time || ''}
           </div>
         </div>
 
@@ -325,111 +379,192 @@ export default function MeetingDetailPage({ params }: { params: Promise<{ id: st
 
         {/* ===== 도서 탭 ===== */}
         {activeTab === 'book' && (
-          <div className="section">
-            <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:'10px'}}>
-              <div className="section-title" style={{marginBottom:0}}>{Icons.book} 선정 도서</div>
-              <button className="btn btn-sm btn-outline" onClick={() => { setBookQuery(meeting.book_title || ''); setBookResults([]); setModal('book'); }}>
-                {Icons.search} {meeting.book_title ? '변경' : '검색'}
-              </button>
-            </div>
-            {meeting.book_title ? (
-              <div style={{position:'relative'}}>
-                <div style={{display:'flex',gap:'12px',padding:'12px',background:'var(--bg-input)',borderRadius:'var(--r)',border:'1px solid var(--border)'}}>
-                  {selectedBook?.thumbnail && (
-                    <img src={selectedBook.thumbnail} alt="" style={{width:'60px',height:'85px',objectFit:'cover',borderRadius:'6px',flexShrink:0,boxShadow:'0 2px 6px rgba(0,0,0,0.15)'}} />
+          <div>
+            <div className="section">
+              <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:'10px'}}>
+                <div className="section-title" style={{marginBottom:0}}>{Icons.book} 선정 도서</div>
+                <div style={{display:'flex',gap:'6px'}}>
+                  {meeting.book_title && (
+                    <button className="btn btn-sm btn-outline" onClick={clearBook}>초기화</button>
                   )}
-                  <div style={{flex:1,minWidth:0}}>
-                    <div style={{fontSize:'14px',fontWeight:600,marginBottom:'2px'}}>{meeting.book_title}</div>
-                    <div style={{fontSize:'12px',color:'var(--text-muted)',marginBottom:'4px'}}>{meeting.book_author || '저자 미상'}</div>
-                    {selectedBook?.publisher && <div style={{fontSize:'11px',color:'var(--text-muted)'}}>출판: {selectedBook.publisher} {selectedBook.publishedDate ? `(${selectedBook.publishedDate.slice(0,4)})` : ''}</div>}
-                    {selectedBook?.rating && (
-                      <div style={{fontSize:'11px',color:'var(--accent)',marginTop:'2px'}}>
-                        {'★'.repeat(Math.round(selectedBook.rating))}{'☆'.repeat(5-Math.round(selectedBook.rating))} {selectedBook.rating.toFixed(1)} ({selectedBook.ratingsCount}명)
-                      </div>
-                    )}
-                    {selectedBook?.description && (
-                      <div style={{fontSize:'11px',color:'var(--text-sub)',marginTop:'6px',lineHeight:'1.5',display:'-webkit-box',WebkitLineClamp:3,WebkitBoxOrient:'vertical',overflow:'hidden'}}>
-                        {selectedBook.description}
-                      </div>
-                    )}
-                  </div>
+                  <button className="btn btn-sm btn-outline" onClick={() => { setBookQuery(meeting.book_title || ''); setBookResults([]); setModal('book'); }}>
+                    {Icons.search} {meeting.book_title ? '변경' : '검색'}
+                  </button>
                 </div>
-                <button onClick={clearBook} style={{position:'absolute',top:'6px',right:'6px',background:'rgba(0,0,0,0.06)',border:'none',borderRadius:'50%',width:'22px',height:'22px',fontSize:'11px',cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',color:'var(--text-muted)'}}>✕</button>
               </div>
-            ) : <div className="empty">아직 도서가 선정되지 않았습니다</div>}
+              {meeting.book_title ? (
+                <div style={{display:'flex',gap:'12px',padding:'12px',background:'var(--bg-input)',borderRadius:'var(--r)',border:'1px solid var(--border)'}}>
+                    {selectedBook?.thumbnail && (
+                      <img src={selectedBook.thumbnail} alt="" style={{width:'70px',height:'100px',objectFit:'cover',borderRadius:'8px',flexShrink:0,boxShadow:'0 2px 8px rgba(0,0,0,0.15)'}} />
+                    )}
+                    <div style={{flex:1,minWidth:0}}>
+                      <div style={{fontSize:'15px',fontWeight:700,marginBottom:'3px'}}>{meeting.book_title}</div>
+                      <div style={{fontSize:'12px',color:'var(--text-muted)',marginBottom:'4px'}}>{meeting.book_author || '저자 미상'}</div>
+                      {selectedBook?.publisher && <div style={{fontSize:'11px',color:'var(--text-muted)'}}>출판: {selectedBook.publisher} {selectedBook.publishedDate ? `(${selectedBook.publishedDate.slice(0,4)})` : ''}</div>}
+                      {selectedBook?.rating && (
+                        <div style={{fontSize:'11px',color:'var(--accent)',marginTop:'2px'}}>
+                          {'★'.repeat(Math.round(selectedBook.rating))}{'☆'.repeat(5-Math.round(selectedBook.rating))} {selectedBook.rating.toFixed(1)} ({selectedBook.ratingsCount}명)
+                        </div>
+                      )}
+                      <div style={{display:'flex',gap:'6px',marginTop:'6px',flexWrap:'wrap'}}>
+                        {selectedBook?.pageCount ? <span className="book-tag">📖 {selectedBook.pageCount}쪽</span> : null}
+                        {selectedBook?.categories?.map((cat, i) => <span key={i} className="book-tag">{cat}</span>)}
+                      </div>
+                    </div>
+                </div>
+              ) : <div className="empty">아직 도서가 선정되지 않았습니다</div>}
+            </div>
+
+            {/* 책 소개 (50자 이내) */}
+            {selectedBook?.description && meeting.book_title && (
+              <div className="section" style={{marginTop:'8px'}}>
+                <div className="section-title" style={{marginBottom:'8px'}}>책 소개</div>
+                <div style={{fontSize:'13px',lineHeight:'1.6',color:'var(--text-sub)'}}>
+                  {selectedBook.description.slice(0, 50)}{selectedBook.description.length > 50 ? '...' : ''}
+                </div>
+              </div>
+            )}
+
+            {/* 네이버 블로그 후기 */}
+            {(reviewsLoading || blogReviews.length > 0) && (
+              <div className="section" style={{marginTop:'8px'}}>
+                <div className="section-title" style={{marginBottom:'8px'}}>독자 후기</div>
+                {reviewsLoading ? (
+                  <div className="empty">후기를 불러오는 중...</div>
+                ) : (
+                  <div style={{display:'flex',flexDirection:'column',gap:'8px'}}>
+                    {blogReviews.map((r, i) => (
+                      <a key={i} href={r.link} target="_blank" rel="noopener noreferrer" className="review-card">
+                        <div className="review-title">{r.title}</div>
+                        <div className="review-snippet">{r.snippet}</div>
+                        <div className="review-meta">{r.blogger} · {r.date?.slice(0,4)}.{r.date?.slice(4,6)}.{r.date?.slice(6,8)}</div>
+                      </a>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
           </div>
         )}
 
         {/* ===== 발제문 탭 ===== */}
         {activeTab === 'disc' && (
-          <div className="section">
-            <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:'10px'}}>
-              <div className="section-title" style={{marginBottom:0}}>{Icons.chat} 발제문 · 질문</div>
-              <div style={{display:'flex',gap:'4px'}}>
-                {discussions.length > 0 && (
-                  <button className="btn-danger-sm" style={{fontSize:'10px',padding:'2px 8px'}} onClick={clearAllDiscussions}>전체 삭제</button>
-                )}
-                <button className="btn btn-sm btn-outline" onClick={() => { setForm({}); setDiscForm({ type: 'topic', content: '' }); setModal('disc'); }}>+ 추가</button>
-              </div>
-            </div>
-            {discussions.length > 0 ? discussions.map(d => (
-              <div key={d.id} className="disc-item" style={{position:'relative'}}>
-                <div className={`disc-type ${d.type}`}>{d.type === 'topic' ? '발제문' : '질문'}</div>
-                <div className="disc-content">{d.content}</div>
-                <div style={{display:'flex',justifyContent:'space-between',alignItems:'center'}}>
-                  <div className="disc-meta">{getName(d.author_id)}</div>
-                  <div style={{display:'flex',gap:'4px'}}>
-                    <button className="del-btn" title="수정" onClick={() => { setForm({editDiscId:d.id}); setDiscForm({type:d.type as 'topic'|'question',content:d.content}); setModal('disc'); }}>{Icons.edit}</button>
-                    <button className="del-btn" onClick={() => deleteDiscussion(d.id)}>✕</button>
+          <div className="rec-panel">
+            {/* 쓰기 모드: 발제문이 없거나 수정 중일 때 */}
+            {(discussions.length === 0 || form.editDiscId) ? (
+              <>
+                <textarea
+                  className="rec-textarea"
+                  placeholder="발제문을 작성해주세요..."
+                  value={discForm.content}
+                  onChange={e => setDiscForm({...discForm, content: e.target.value})}
+                  autoFocus
+                />
+                <div className="rec-bottom-btns">
+                  <button
+                    className="rec-action-btn secondary"
+                    onClick={() => { if (!meeting?.book_title) { alert('도서선정부터 해주세요!'); return; } generateAiDiscussion(); }}
+                    disabled={aiDiscLoading}
+                  >
+                    {aiDiscLoading ? '생성중...' : 'AI발제문'}
+                  </button>
+                  <button
+                    className="rec-action-btn primary"
+                    onClick={() => { if (!discForm.content.trim()) { alert('발제문을 쓰고나 저장해주세요!'); return; } addDiscussion(); }}
+                  >
+                    {form.editDiscId ? '수정하기' : '저장하기'}
+                  </button>
+                  {form.editDiscId && (
+                    <button className="rec-action-btn danger" onClick={() => { setForm({}); setDiscForm({type:'topic',content:''}); }}>취소</button>
+                  )}
+                  <button className="rec-action-btn danger" onClick={clearAllDiscussions}>모두삭제</button>
+                </div>
+              </>
+            ) : (
+              /* 읽기 모드: 저장된 발제문 목록 */
+              <div className="read-list">
+                {discussions.map(d => (
+                  <div key={d.id} className="read-card">
+                    <div className="read-card-header">
+                      <span className="read-card-author">{getName(d.author_id)}</span>
+                      <span className="read-card-date">{new Date(d.created_at || '').toLocaleString('ko',{month:'short',day:'numeric',hour:'2-digit',minute:'2-digit'})}</span>
+                    </div>
+                    <div className="read-card-content" dangerouslySetInnerHTML={{__html: d.content.replace(/\n/g, '<br/>')}} />
+                    <div className="read-card-actions">
+                      <button className="read-action-btn" onClick={() => { setForm({editDiscId:d.id}); setDiscForm({type:'topic',content:d.content}); }}>수정하기</button>
+                      <button className="read-action-btn delete" onClick={() => deleteDiscussion(d.id)}>삭제하기</button>
+                    </div>
                   </div>
+                ))}
+                <div className="rec-bottom-btns" style={{marginTop:'8px'}}>
+                  <button className="rec-action-btn danger" onClick={clearAllDiscussions}>모두지우기</button>
+                  {deletedDiscussions.length > 0 && (
+                    <button className="rec-action-btn secondary" onClick={undoDiscussions}>되돌리기</button>
+                  )}
                 </div>
               </div>
-            )) : <div className="empty">아직 발제문이 없습니다</div>}
+            )}
           </div>
         )}
 
         {/* ===== 기록 탭 ===== */}
         {activeTab === 'rec' && (
-          <div className="section">
-            <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:'10px'}}>
-              <div className="section-title" style={{marginBottom:0,display:'flex',alignItems:'center',gap:'6px'}}>
-                {Icons.edit} 모임 기록
-                <button
-                  onClick={toggleSpeech}
-                  style={{background: isListening ? '#ef4444' : 'var(--bg-input)', border:'1px solid var(--border)', borderRadius:'50%', width:'26px', height:'26px', display:'flex', alignItems:'center', justifyContent:'center', cursor:'pointer', transition:'all 0.2s', animation: isListening ? 'pulse 1.5s infinite' : 'none'}}
-                  title={isListening ? '음성인식 중지' : '음성으로 기록'}
-                >
-                  <span style={{color: isListening ? '#fff' : 'var(--text-sub)', fontSize:'12px'}}>{Icons.mic}</span>
-                </button>
-                {isListening && <span style={{fontSize:'11px',color:'#ef4444',fontWeight:500}}>인식 중...</span>}
-              </div>
-              {records.length > 0 && (
-                <button className="btn-danger-sm" style={{fontSize:'10px',padding:'2px 8px'}} onClick={clearAllRecords}>전체 삭제</button>
-              )}
-            </div>
-            <div style={{display:'flex',gap:'6px',marginBottom:'10px'}}>
-              <textarea
-                className="input"
-                style={{minHeight:'60px',fontSize:'13px',lineHeight:'1.7',flex:1}}
-                placeholder="모임 내용을 자유롭게 기록해주세요..."
-                value={recContent}
-                onChange={e => setRecContent(e.target.value)}
-              />
-            </div>
-            <button className="btn btn-accent btn-full" style={{marginBottom:'12px'}} onClick={addRecord} disabled={!recContent.trim()}>기록 추가</button>
-            {records.length > 0 ? (
-              <div style={{display:'flex',flexDirection:'column',gap:'8px'}}>
+          <div className="rec-panel">
+            {/* 쓰기 모드: 기록이 없거나 작성 중일 때 */}
+            {(records.length === 0 || form.editDiscId === 'rec-edit') ? (
+              <>
+                <textarea
+                  className="rec-textarea"
+                  placeholder="모임 내용을 자유롭게 기록해주세요..."
+                  value={recContent}
+                  onChange={e => setRecContent(e.target.value)}
+                  autoFocus
+                />
+                <div className="rec-bottom-btns">
+                  <button
+                    className={`rec-action-btn ${isListening ? 'recording' : 'secondary'}`}
+                    onClick={toggleSpeech}
+                  >
+                    {isListening ? '중지하기' : '말로기록'}
+                  </button>
+                  <button
+                    className="rec-action-btn primary"
+                    onClick={() => { addRecord(); setForm({}); }}
+                    disabled={!recContent.trim()}
+                  >
+                    저장하기
+                  </button>
+                  {records.length > 0 && (
+                    <button className="rec-action-btn danger" onClick={() => { setForm({}); setRecContent(''); }}>취소</button>
+                  )}
+                  <button className="rec-action-btn danger" onClick={clearAllRecords}>모두삭제</button>
+                </div>
+              </>
+            ) : (
+              /* 읽기 모드: 저장된 기록 목록 */
+              <div className="read-list">
                 {records.map(r => (
-                  <div key={r.id} style={{padding:'10px 12px',background:'var(--bg-input)',borderRadius:'var(--r-sm)',border:'1px solid var(--border)'}}>
-                    <div style={{fontSize:'13px',lineHeight:'1.7',whiteSpace:'pre-wrap'}}>{r.content}</div>
-                    <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginTop:'6px'}}>
-                      <div style={{fontSize:'11px',color:'var(--text-muted)'}}>{r.author} · {new Date(r.created_at).toLocaleString('ko',{month:'short',day:'numeric',hour:'2-digit',minute:'2-digit'})}</div>
-                      <button className="del-btn" onClick={() => deleteRecord(r.id)}>✕</button>
+                  <div key={r.id} className="read-card">
+                    <div className="read-card-header">
+                      <span className="read-card-author">{r.author}</span>
+                      <span className="read-card-date">{new Date(r.created_at).toLocaleString('ko',{month:'short',day:'numeric',hour:'2-digit',minute:'2-digit'})}</span>
+                    </div>
+                    <div className="read-card-content">{r.content}</div>
+                    <div className="read-card-actions">
+                      <button className="read-action-btn" onClick={() => { setRecContent(r.content); deleteRecord(r.id); setForm({editDiscId:'rec-edit'}); }}>수정하기</button>
+                      <button className="read-action-btn delete" onClick={() => deleteRecord(r.id)}>삭제하기</button>
                     </div>
                   </div>
                 ))}
+                <div className="rec-bottom-btns" style={{marginTop:'8px'}}>
+                  <button className="rec-action-btn secondary" onClick={() => { setRecContent(''); setForm({editDiscId:'rec-edit'}); }}>+ 기록 추가</button>
+                  <button className="rec-action-btn danger" onClick={clearAllRecords}>모두지우기</button>
+                  {deletedRecords.length > 0 && (
+                    <button className="rec-action-btn secondary" onClick={undoRecords}>되돌리기</button>
+                  )}
+                </div>
               </div>
-            ) : <div className="empty">아직 기록이 없습니다</div>}
+            )}
           </div>
         )}
       </div>

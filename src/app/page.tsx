@@ -53,17 +53,18 @@ export default function Home() {
     return arr;
   }, [members]);
 
-  // 별똑별 애니메이션
-  const [particles, setParticles] = useState<{id:number;type:string;left:number;delay:number;dur:number;emoji:string}[]>([]);
+  // 🌸 봄 꽃잎 애니메이션
+  const [particles, setParticles] = useState<{id:number;left:number;delay:number;dur:number;emoji:string;size:number;sway:number}[]>([]);
   useEffect(() => {
-    const emojis = ['🌟','⭐','🌠','🐻','🐰','🐱','🐶','🦊','🐾','🌿','🌸','🦥'];
-    const items = Array.from({length:14},(_,i) => ({
+    const petals = ['🌸','🌸','🌸','🌸','💮','🤍','✿','❀','🌷'];
+    const items = Array.from({length:22},(_,i) => ({
       id: i,
-      type: i < 5 ? 'star' : 'animal',
       left: Math.random()*100,
-      delay: Math.random()*8,
-      dur: 4 + Math.random()*6,
-      emoji: emojis[Math.floor(Math.random()*emojis.length)]
+      delay: Math.random()*10,
+      dur: 6 + Math.random()*8,
+      emoji: petals[Math.floor(Math.random()*petals.length)],
+      size: 12 + Math.random()*14,
+      sway: 30 + Math.random()*60,
     }));
     setParticles(items);
   }, []);
@@ -139,20 +140,15 @@ export default function Home() {
 
   return (
     <div className="select-page" style={{position:'relative',overflow:'hidden'}}>
-      {/* 별똑별 & 동물 애니메이션 */}
+      {/* 🌸 봄 꽃잎 낙화 애니메이션 */}
       {particles.map(p => (
-        <span key={p.id} style={{
-          position:'absolute',
+        <span key={p.id} className="falling-petal" style={{
           left:`${p.left}%`,
-          top: p.type==='star' ? '-30px' : `${20+Math.random()*60}%`,
-          fontSize: p.type==='star' ? '14px' : '18px',
-          opacity: 0.6,
-          pointerEvents:'none',
-          zIndex:0,
-          animation: p.type==='star'
-            ? `shootingStar ${p.dur}s ${p.delay}s linear infinite`
-            : `floatAnimal ${p.dur}s ${p.delay}s ease-in-out infinite alternate`,
-        }}>{p.emoji}</span>
+          fontSize:`${p.size}px`,
+          animationDuration:`${p.dur}s`,
+          animationDelay:`${p.delay}s`,
+          '--sway': `${p.sway}px`,
+        } as React.CSSProperties}>{p.emoji}</span>
       ))}
       <h1 style={{position:'relative',zIndex:1}}>1+1 독서모임</h1>
       <p className="desc" style={{position:'relative',zIndex:1}}>본인 선택 후 독서 모임일정을 확인해주세요</p>
