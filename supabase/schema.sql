@@ -38,6 +38,10 @@ CREATE TABLE meetings (
   proposal_id UUID REFERENCES schedule_proposals(id),
   book_title TEXT,
   book_author TEXT,
+  location TEXT,
+  max_members INTEGER,
+  conditions TEXT,
+  notice TEXT,
   created_at TIMESTAMPTZ DEFAULT NOW()
 );
 

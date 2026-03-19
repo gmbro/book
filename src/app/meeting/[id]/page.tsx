@@ -56,6 +56,10 @@ export default function MeetingDetailPage({ params }: { params: Promise<{ id: st
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const [deletedRecords, setDeletedRecords] = useState<any[]>([]);
 
+  // 모임 상세 안내 편집
+  const [editingInfo, setEditingInfo] = useState(false);
+  const [infoForm, setInfoForm] = useState({ location: '', max_members: '', conditions: '', notice: '' });
+
   const generateAiDiscussion = async () => {
     if (!meeting?.book_title) { alert('도서 선정부터 해주세요!'); return; }
     setAiDiscLoading(true);
@@ -588,6 +592,95 @@ export default function MeetingDetailPage({ params }: { params: Promise<{ id: st
         {/* ===== 도서 탭 ===== */}
         {activeTab === 'book' && (
           <div>
+            {/* 모임 상세 안내 */}
+            <div className="section" style={{marginBottom:'12px'}}>
+              <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:'10px'}}>
+                <div className="section-title" style={{marginBottom:0}}>모임 안내</div>
+                {isLeader && !editingInfo && (
+                  <button className="btn btn-sm btn-outline" onClick={() => {
+                    setInfoForm({
+                      location: meeting.location || '',
+                      max_members: meeting.max_members?.toString() || '',
+                      conditions: meeting.conditions || '',
+                      notice: meeting.notice || '',
+                    });
+                    setEditingInfo(true);
+                  }}>편집</button>
+                )}
+              </div>
+              {editingInfo ? (
+                <div style={{display:'flex',flexDirection:'column',gap:'8px'}}>
+                  <input className="input" placeholder="장소 (예: 스타벅스 강남역점)" value={infoForm.location} onChange={e => setInfoForm({...infoForm, location: e.target.value})}/>
+                  <input className="input" placeholder="참여인원 (예: 10)" type="number" value={infoForm.max_members} onChange={e => setInfoForm({...infoForm, max_members: e.target.value})}/>
+                  <input className="input" placeholder="참여조건 (예: 독후감 필수)" value={infoForm.conditions} onChange={e => setInfoForm({...infoForm, conditions: e.target.value})}/>
+                  <textarea className="input" placeholder="공지사항" value={infoForm.notice} onChange={e => setInfoForm({...infoForm, notice: e.target.value})} style={{minHeight:'60px',resize:'vertical',fontFamily:'inherit'}}/>
+                  <div style={{display:'flex',gap:'6px',justifyContent:'flex-end'}}>
+                    <button className="btn btn-sm btn-outline" onClick={() => setEditingInfo(false)}>취소</button>
+                    <button className="btn btn-sm" style={{background:'var(--accent)',color:'white',border:'none'}} onClick={async () => {
+                      const updates = {
+                        location: infoForm.location || null,
+                        max_members: infoForm.max_members ? parseInt(infoForm.max_members) : null,
+                        conditions: infoForm.conditions || null,
+                        notice: infoForm.notice || null,
+                      };
+                      const up = { ...meeting, ...updates };
+                      setMeeting(up);
+                      if (useLocal) {
+                        const stored = JSON.parse(localStorage.getItem('meetings') || '[]');
+                        const idx = stored.findIndex((m: Meeting) => m.id === id);
+                        if (idx >= 0) stored[idx] = up;
+                        localStorage.setItem('meetings', JSON.stringify(stored));
+                      } else {
+                        await supabase.from('meetings').update(updates).eq('id', id);
+                      }
+                      setEditingInfo(false);
+                    }}>저장</button>
+                  </div>
+                </div>
+              ) : (
+                <div style={{display:'flex',flexDirection:'column',gap:'6px',fontSize:'13px',lineHeight:'1.5'}}>
+                  <div style={{display:'flex',alignItems:'flex-start',gap:'8px'}}>
+                    <span style={{flexShrink:0,width:'16px',textAlign:'center'}}>📅</span>
+                    <div>
+                      <span style={{fontWeight:600}}>모임일정</span>
+                      <div style={{color:'var(--text-sub)',marginTop:'2px'}}>{meeting.date ? new Date(meeting.date + 'T00:00:00').toLocaleDateString('ko', {year:'numeric',month:'long',day:'numeric',weekday:'short'}) : '미정'} {meeting.time || ''}</div>
+                    </div>
+                  </div>
+                  <div style={{display:'flex',alignItems:'flex-start',gap:'8px'}}>
+                    <span style={{flexShrink:0,width:'16px',textAlign:'center'}}>📍</span>
+                    <div>
+                      <span style={{fontWeight:600}}>장소</span>
+                      <div style={{color:'var(--text-sub)',marginTop:'2px'}}>{meeting.location || '미정'}</div>
+                    </div>
+                  </div>
+                  <div style={{display:'flex',alignItems:'flex-start',gap:'8px'}}>
+                    <span style={{flexShrink:0,width:'16px',textAlign:'center'}}>👥</span>
+                    <div>
+                      <span style={{fontWeight:600}}>참여인원</span>
+                      <div style={{color:'var(--text-sub)',marginTop:'2px'}}>{meeting.max_members ? `최대 ${meeting.max_members}명` : '제한 없음'}</div>
+                    </div>
+                  </div>
+                  {meeting.conditions && (
+                    <div style={{display:'flex',alignItems:'flex-start',gap:'8px'}}>
+                      <span style={{flexShrink:0,width:'16px',textAlign:'center'}}>✅</span>
+                      <div>
+                        <span style={{fontWeight:600}}>참여조건</span>
+                        <div style={{color:'var(--text-sub)',marginTop:'2px'}}>{meeting.conditions}</div>
+                      </div>
+                    </div>
+                  )}
+                  {meeting.notice && (
+                    <div style={{display:'flex',alignItems:'flex-start',gap:'8px'}}>
+                      <span style={{flexShrink:0,width:'16px',textAlign:'center'}}>📢</span>
+                      <div>
+                        <span style={{fontWeight:600}}>공지사항</span>
+                        <div style={{color:'var(--text-sub)',marginTop:'2px',whiteSpace:'pre-line'}}>{meeting.notice}</div>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
             <div className="section">
               <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:'10px'}}>
                 <div className="section-title" style={{marginBottom:0}}>{Icons.book} 선정 도서</div>

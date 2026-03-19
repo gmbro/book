@@ -51,6 +51,9 @@ export interface Meeting {
   proposal_id: string | null;
   book_title: string | null;
   book_author: string | null;
+  max_members: number | null;
+  conditions: string | null;
+  notice: string | null;
   created_at: string;
 }
 
