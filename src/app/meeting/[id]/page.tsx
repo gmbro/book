@@ -36,6 +36,8 @@ export default function MeetingDetailPage({ params }: { params: Promise<{ id: st
   const [bookReviews, setBookReviews] = useState<BookReview[]>([]);
   const [reviewContent, setReviewContent] = useState('');
   const [editingReview, setEditingReview] = useState(false);
+  const [showFullDesc, setShowFullDesc] = useState(false);
+  const [aiReviewLoading, setAiReviewLoading] = useState(false);
 
   // 모달
   const [modal, setModal] = useState<string | null>(null);
@@ -70,6 +72,29 @@ export default function MeetingDetailPage({ params }: { params: Promise<{ id: st
       }
     } catch { alert('AI 발제문 생성에 실패했습니다.'); }
     setAiDiscLoading(false);
+  };
+
+  const generateAiReview = async () => {
+    if (!meeting?.book_title) { alert('도서 선정부터 해주세요!'); return; }
+    setAiReviewLoading(true);
+    try {
+      const res = await fetch('/api/generate-review', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          bookTitle: meeting.book_title,
+          bookAuthor: meeting.book_author,
+          bookDescription: selectedBook?.description || '',
+        }),
+      });
+      const data = await res.json();
+      if (data.error) {
+        alert(data.error);
+      } else if (data.review) {
+        setReviewContent(data.review);
+      }
+    } catch { alert('AI 독후감 생성에 실패했습니다.'); }
+    setAiReviewLoading(false);
   };
 
   // 도서 검색
@@ -472,13 +497,24 @@ export default function MeetingDetailPage({ params }: { params: Promise<{ id: st
               ) : <div className="empty">아직 도서가 선정되지 않았습니다</div>}
             </div>
 
-            {/* 책 소개 (50자 이내) */}
+            {/* 책 소개 */}
             {selectedBook?.description && meeting.book_title && (
               <div className="section" style={{marginTop:'8px'}}>
                 <div className="section-title" style={{marginBottom:'8px'}}>책 소개</div>
                 <div style={{fontSize:'13px',lineHeight:'1.6',color:'var(--text-sub)'}}>
-                  {selectedBook.description.slice(0, 50)}{selectedBook.description.length > 50 ? '...' : ''}
+                  {showFullDesc || selectedBook.description.length <= 100
+                    ? selectedBook.description
+                    : selectedBook.description.slice(0, 100) + '...'
+                  }
                 </div>
+                {selectedBook.description.length > 100 && (
+                  <button
+                    onClick={() => setShowFullDesc(!showFullDesc)}
+                    style={{background:'none',border:'none',color:'var(--accent)',fontSize:'12px',cursor:'pointer',padding:'6px 0 0',fontFamily:'inherit',fontWeight:500}}
+                  >
+                    {showFullDesc ? '접기 ▴' : '더보기 ▾'}
+                  </button>
+                )}
               </div>
             )}
 
@@ -581,6 +617,13 @@ export default function MeetingDetailPage({ params }: { params: Promise<{ id: st
                   autoFocus
                 />
                 <div className="rec-bottom-btns">
+                  <button
+                    className="rec-action-btn secondary"
+                    onClick={generateAiReview}
+                    disabled={aiReviewLoading}
+                  >
+                    {aiReviewLoading ? '생성중...' : 'AI 독후감'}
+                  </button>
                   <button
                     className="rec-action-btn primary"
                     onClick={saveReview}
