@@ -372,19 +372,21 @@ export default function SchedulePage() {
   // ===== 투표(Poll) CRUD =====
   const handleCreatePoll = async () => {
     if (!user) return;
+    if (!form.pollTitle?.trim()) { setConfirmAction({msg:'타이틀을 입력해주세요.',action:()=>setConfirmAction(null)}); return; }
     if (!form.pollDesc?.trim()) { setConfirmAction({msg:'투표 내용을 입력해주세요.',action:()=>setConfirmAction(null)}); return; }
-    if (!form.pollLocation?.trim()) { setConfirmAction({msg:'장소를 입력해주세요.',action:()=>setConfirmAction(null)}); return; }
     if (!form.pollDate) { setConfirmAction({msg:'일정을 입력해주세요.',action:()=>setConfirmAction(null)}); return; }
     if (!form.pollDeadline) { setConfirmAction({msg:'투표 마감 기한을 입력해주세요.',action:()=>setConfirmAction(null)}); return; }
     const validSchedules = [{date: form.pollDate, time: form.pollTime || '오후 3시'}];
-    const title = form.pollLocation.trim();
+    const title = form.pollTitle.trim();
     const desc = form.pollDesc.trim();
+    const location = form.pollLocation?.trim();
     // deadline = explicit or last schedule date + 23:59
     const deadlineDate = form.pollDeadline || (validSchedules.length > 0 ? validSchedules[validSchedules.length - 1].date : null);
     const deadline = deadlineDate ? new Date(deadlineDate + 'T23:59:59').toISOString() : null;
-    // full description with schedules
+    // full description with schedules and location
     const scheduleText = validSchedules.length > 0 ? validSchedules.map(s => `${s.date} ${s.time}`).join('\n') : '';
-    const fullDesc = scheduleText ? `${desc}\n\n📅 일정:\n${scheduleText}` : desc;
+    const locationText = location ? `\n\n📍 장소: ${location}` : '';
+    const fullDesc = scheduleText ? `${desc}\n\n📅 일정:\n${scheduleText}${locationText}` : `${desc}${locationText}`;
     if (useLocal) {
       const newPoll: PollWithVotes = {
         id: `poll-${Date.now()}`, title, description: fullDesc,
@@ -584,81 +586,7 @@ export default function SchedulePage() {
         {/* 달력 */}
         <Calendar proposedDates={proposedDates} confirmedDates={confirmedDates} onDateClick={handleCalendarDateClick} />
 
-        {/* 모임 일정 (투표) */}
-        <div className="section">
-          <div className="section-title">{Icons.vote} 모임 일정</div>
-          {proposals.map(p => {
-            const uv = user ? p.votes.find(v => v.member_id === user.id)?.vote : null;
-            const yes = p.votes.filter(v => v.vote === 'available');
-            const no = p.votes.filter(v => v.vote === 'unavailable');
-            return (
-              <div key={p.id} className="vote-card">
-                <div className="vote-card-head">
-                  <div>
-                    <div className="vote-title">{p.title}</div>
-                    <div className="vote-proposer">제안: {p.proposerName}</div>
-                  </div>
-                  {p.proposed_by === user?.id && <button className="del-btn" onClick={() => handleDeleteProposal(p.id)}>✕</button>}
-                </div>
-                {p.description && <div className="vote-desc">{p.description}</div>}
-                {p.deadline && (() => {
-                  const now = new Date(); const dl = new Date(p.deadline+'T23:59:59');
-                  const diff = Math.ceil((dl.getTime()-now.getTime())/(1000*60*60*24));
-                  const expired = diff < 0;
-                  return <div className={`deadline-bar ${expired?'expired':''}`}>
-                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
-                    {expired ? '마감됨' : `마감 ${diff}일 남음 (${p.deadline})`}
-                  </div>;
-                })()}
-                <div className="vote-counts">
-                  <span className="vote-count yes">{Icons.check} {yes.length}</span>
-                  <span className="vote-count no">{Icons.x} {no.length}</span>
-                </div>
-                {/* 참여자 상세 */}
-                <div className="vote-members">
-                  {yes.length > 0 && (
-                    <div className="vote-member-row">
-                      <span className="vote-member-label">가능</span>
-                      {yes.map(v => <span key={v.id} className="vote-member-tag yes">{getName(v.member_id)}</span>)}
-                    </div>
-                  )}
-                  {no.length > 0 && (
-                    <div className="vote-member-row">
-                      <span className="vote-member-label">불가</span>
-                      {no.map(v => <span key={v.id} className="vote-member-tag no">{getName(v.member_id)}</span>)}
-                    </div>
-                  )}
-                  {(() => {
-                    const votedIds = new Set(p.votes.map(v => v.member_id));
-                    const notVoted = members.filter(m => !votedIds.has(m.id));
-                    return notVoted.length > 0 ? (
-                      <>
-                        <div className="vote-member-row" style={{alignItems:'center'}}>
-                          <span className="vote-member-label">미참</span>
-                          {notVoted.map(m => <span key={m.id} className="vote-member-tag">{m.name}</span>)}
-                          <button onClick={() => shareReminder(p)} style={{marginLeft:'auto',background:'none',border:'1px solid var(--border)',borderRadius:'6px',padding:'2px 8px',cursor:'pointer',display:'flex',alignItems:'center',gap:'3px',fontSize:'10px',color:'var(--text-sub)',fontFamily:'inherit'}} title="미참여자에게 투표 독려 메시지를 보냅니다">
-                            {Icons.share} 알림
-                          </button>
-                        </div>
-                        <div style={{fontSize:'10px',color:'var(--text-muted)',marginTop:'2px',paddingLeft:'40px'}}>
-                          ※ 알림 버튼을 누르면 미참여자에게 투표 독려 메시지를 보낼 수 있어요
-                        </div>
-                      </>
-                    ) : null;
-                  })()}
-                </div>
-                <div className="vote-btns">
-                  <button className={`vote-btn ${uv==='available'?'on-yes':''}`} onClick={() => handleVote(p.id,'available')}>{Icons.check} 참여 가능</button>
-                  <button className={`vote-btn ${uv==='unavailable'?'on-no':''}`} onClick={() => handleVote(p.id,'unavailable')}>{Icons.x} 불가능</button>
-                </div>
-                {isLeader && (
-                  <button className="btn btn-green btn-full" style={{marginTop:'8px',fontSize:'12px',padding:'8px'}} onClick={() => { setForm({proposal:p.id,dates:p.dates?.join(', ')||''}); setModal('confirm'); }}>확정하기</button>
-                )}
-              </div>
-            );
-          })}
 
-        </div>
 
         {/* 일정 투표 카드 */}
         {polls.map(p => {
@@ -859,12 +787,16 @@ export default function SchedulePage() {
         <div className="overlay" onClick={() => setModal(null)}><div className="modal" onClick={e => e.stopPropagation()} style={{maxHeight:'85vh',overflow:'auto'}}>
           <h2>일정 투표하기</h2>
           <div className="form-group">
-            <label className="form-label">장소</label>
-            <input className="input" placeholder="예: 강남역 스타벅스" value={form.pollLocation||''} onChange={e => setForm({...form,pollLocation:e.target.value})} />
+            <label className="form-label">타이틀</label>
+            <input className="input" placeholder="예: 5월 모임 일정" value={form.pollTitle||''} onChange={e => setForm({...form,pollTitle:e.target.value})} />
           </div>
           <div className="form-group">
             <label className="form-label">투표 내용</label>
             <textarea className="input" placeholder="투표에 대한 상세 설명을 적어주세요" value={form.pollDesc||''} onChange={e => setForm({...form,pollDesc:e.target.value})} />
+          </div>
+          <div className="form-group">
+            <label className="form-label">장소 (선택)</label>
+            <input className="input" placeholder="예: 강남역 스타벅스" value={form.pollLocation||''} onChange={e => setForm({...form,pollLocation:e.target.value})} />
           </div>
           <div className="form-group">
             <label className="form-label">일시</label>
