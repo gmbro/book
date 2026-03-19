@@ -97,3 +97,12 @@ export interface PollComment {
   content: string;
   created_at: string;
 }
+
+export interface BookReview {
+  id: string;
+  meeting_id: string;
+  author_id: string;
+  content: string;
+  created_at: string;
+  updated_at: string;
+}

@@ -109,3 +109,17 @@ INSERT INTO members (name, role) VALUES
   ('우동인', 'member'),
   ('한태원', 'member'),
   ('송의선', 'member');
+
+-- 독후감 테이블
+CREATE TABLE book_reviews (
+  id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+  meeting_id UUID NOT NULL REFERENCES meetings(id) ON DELETE CASCADE,
+  author_id UUID NOT NULL REFERENCES members(id) ON DELETE CASCADE,
+  content TEXT NOT NULL,
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  updated_at TIMESTAMPTZ DEFAULT NOW(),
+  UNIQUE(meeting_id, author_id)
+);
+
+ALTER TABLE book_reviews ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "Allow all for book_reviews" ON book_reviews FOR ALL USING (true) WITH CHECK (true);

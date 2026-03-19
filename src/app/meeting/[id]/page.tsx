@@ -2,7 +2,7 @@
 
 import { useEffect, useState, use } from 'react';
 import { useRouter } from 'next/navigation';
-import { supabase, Member, Meeting, DiscussionItem, MeetingRecord } from '@/lib/supabase';
+import { supabase, Member, Meeting, DiscussionItem, MeetingRecord, BookReview } from '@/lib/supabase';
 
 /* SVG 아이콘 */
 const Icons = {
@@ -30,7 +30,12 @@ export default function MeetingDetailPage({ params }: { params: Promise<{ id: st
   const [records, setRecords] = useState<{id:string;content:string;author:string;created_at:string}[]>([]);
   const [members, setMembers] = useState<Member[]>([]);
   const [useLocal, setUseLocal] = useState(false);
-  const [activeTab, setActiveTab] = useState<'book' | 'disc' | 'rec'>('book');
+  const [activeTab, setActiveTab] = useState<'book' | 'disc' | 'review' | 'rec'>('book');
+
+  // 독후감
+  const [bookReviews, setBookReviews] = useState<BookReview[]>([]);
+  const [reviewContent, setReviewContent] = useState('');
+  const [editingReview, setEditingReview] = useState(false);
 
   // 모달
   const [modal, setModal] = useState<string | null>(null);
@@ -119,6 +124,11 @@ export default function MeetingDetailPage({ params }: { params: Promise<{ id: st
         // load records list
         const storedRecs = localStorage.getItem(`records-list-${id}`);
         if (storedRecs) setRecords(JSON.parse(storedRecs));
+        // load book reviews
+        try {
+          const { data: brData } = await supabase.from('book_reviews').select('*').eq('meeting_id', id).order('created_at');
+          if (brData) setBookReviews(brData);
+        } catch { /* table might not exist yet */ }
         return;
       }
     } catch { /* fallback to local */ }
@@ -131,6 +141,9 @@ export default function MeetingDetailPage({ params }: { params: Promise<{ id: st
     if (sr) { const parsed = JSON.parse(sr); setRecord(parsed); setRecContent(parsed.content || ''); }
     const storedRecs = localStorage.getItem(`records-list-${id}`);
     if (storedRecs) setRecords(JSON.parse(storedRecs));
+    // 로컬 독후감
+    const storedReviews = localStorage.getItem(`book-reviews-${id}`);
+    if (storedReviews) setBookReviews(JSON.parse(storedReviews));
   };
 
   // 도서 검색
@@ -344,6 +357,49 @@ export default function MeetingDetailPage({ params }: { params: Promise<{ id: st
   const stopRec = () => { recorder?.stop(); setIsRec(false); };
   const fmtTime = (s: number) => `${Math.floor(s / 60).toString().padStart(2, '0')}:${(s % 60).toString().padStart(2, '0')}`;
   const getName = (aid: string) => members.find(m => m.id === aid)?.name || '알 수 없음';
+  const isLeader = currentUser?.role === 'leader';
+
+  // ===== 독후감 CRUD =====
+  const myReview = bookReviews.find(r => r.author_id === currentUser?.id);
+
+  const saveReview = async () => {
+    if (!currentUser || !reviewContent.trim()) return;
+    if (useLocal) {
+      if (myReview) {
+        const updated = bookReviews.map(r => r.id === myReview.id ? { ...r, content: reviewContent.trim(), updated_at: new Date().toISOString() } : r);
+        setBookReviews(updated);
+        localStorage.setItem(`book-reviews-${id}`, JSON.stringify(updated));
+      } else {
+        const newReview: BookReview = { id: `br-${Date.now()}`, meeting_id: id, author_id: currentUser.id, content: reviewContent.trim(), created_at: new Date().toISOString(), updated_at: new Date().toISOString() };
+        const updated = [...bookReviews, newReview];
+        setBookReviews(updated);
+        localStorage.setItem(`book-reviews-${id}`, JSON.stringify(updated));
+      }
+    } else {
+      if (myReview) {
+        await supabase.from('book_reviews').update({ content: reviewContent.trim(), updated_at: new Date().toISOString() }).eq('id', myReview.id);
+      } else {
+        await supabase.from('book_reviews').insert({ meeting_id: id, author_id: currentUser.id, content: reviewContent.trim() });
+      }
+      const { data } = await supabase.from('book_reviews').select('*').eq('meeting_id', id).order('created_at');
+      if (data) setBookReviews(data);
+    }
+    setEditingReview(false);
+    setReviewContent('');
+  };
+
+  const deleteReview = async (reviewId: string) => {
+    if (!confirm('독후감을 삭제하시겠습니까?')) return;
+    if (useLocal) {
+      const updated = bookReviews.filter(r => r.id !== reviewId);
+      setBookReviews(updated);
+      localStorage.setItem(`book-reviews-${id}`, JSON.stringify(updated));
+    } else {
+      await supabase.from('book_reviews').delete().eq('id', reviewId);
+      const { data } = await supabase.from('book_reviews').select('*').eq('meeting_id', id).order('created_at');
+      if (data) setBookReviews(data);
+    }
+  };
 
   if (!meeting) {
     return (
@@ -374,6 +430,7 @@ export default function MeetingDetailPage({ params }: { params: Promise<{ id: st
         <div className="tabs">
           <button className={`tab ${activeTab === 'book' ? 'on' : ''}`} onClick={() => setActiveTab('book')}>도서</button>
           <button className={`tab ${activeTab === 'disc' ? 'on' : ''}`} onClick={() => setActiveTab('disc')}>발제문</button>
+          <button className={`tab ${activeTab === 'review' ? 'on' : ''}`} onClick={() => setActiveTab('review')}>독후감</button>
           <button className={`tab ${activeTab === 'rec' ? 'on' : ''}`} onClick={() => setActiveTab('rec')}>기록</button>
         </div>
 
@@ -501,6 +558,76 @@ export default function MeetingDetailPage({ params }: { params: Promise<{ id: st
                   {deletedDiscussions.length > 0 && (
                     <button className="rec-action-btn secondary" onClick={undoDiscussions}>되돌리기</button>
                   )}
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* ===== 독후감 탭 ===== */}
+        {activeTab === 'review' && (
+          <div className="rec-panel">
+            {!meeting.book_title ? (
+              <div className="empty">먼저 도서를 선정해주세요!</div>
+            ) : editingReview || (bookReviews.length === 0 && !myReview) ? (
+              /* 쓰기 모드 */
+              <>
+                <textarea
+                  className="rec-textarea"
+                  placeholder={`📖 『${meeting.book_title}』을 읽고 느낀 점을 자유롭게 적어주세요...\n\n✏️ 인상 깊었던 구절, 생각의 변화, 추천 이유 등\n🎨 이모지도 자유롭게 사용해보세요!`}
+                  value={reviewContent}
+                  onChange={e => setReviewContent(e.target.value)}
+                  style={{fontSize:'16px',lineHeight:'2'}}
+                  autoFocus
+                />
+                <div className="rec-bottom-btns">
+                  <button
+                    className="rec-action-btn primary"
+                    onClick={saveReview}
+                    disabled={!reviewContent.trim()}
+                  >
+                    {myReview ? '수정 완료' : '저장하기'}
+                  </button>
+                  {editingReview && (
+                    <button className="rec-action-btn danger" onClick={() => { setEditingReview(false); setReviewContent(''); }}>취소</button>
+                  )}
+                </div>
+              </>
+            ) : (
+              /* 읽기 모드 */
+              <div className="read-list">
+                {/* 내 독후감이 없고, 다른 사람 것만 있을 때 쓰기 버튼 */}
+                {!myReview && (
+                  <button
+                    className="rec-action-btn secondary"
+                    style={{marginBottom:'12px'}}
+                    onClick={() => { setReviewContent(''); setEditingReview(true); }}
+                  >
+                    ✏️ 나도 독후감 쓰기
+                  </button>
+                )}
+                {bookReviews.map(r => (
+                  <div key={r.id} className="read-card">
+                    <div className="read-card-header">
+                      <span className="read-card-author">{getName(r.author_id)}</span>
+                      <span className="read-card-date">
+                        {new Date(r.updated_at || r.created_at).toLocaleString('ko',{month:'short',day:'numeric',hour:'2-digit',minute:'2-digit'})}
+                        {r.updated_at !== r.created_at && ' (수정됨)'}
+                      </span>
+                    </div>
+                    <div className="read-card-content" style={{fontSize:'15px',lineHeight:'2'}}>{r.content}</div>
+                    {(r.author_id === currentUser?.id || isLeader) && (
+                      <div className="read-card-actions">
+                        {r.author_id === currentUser?.id && (
+                          <button className="read-action-btn" onClick={() => { setReviewContent(r.content); setEditingReview(true); }}>수정하기</button>
+                        )}
+                        <button className="read-action-btn delete" onClick={() => deleteReview(r.id)}>삭제하기</button>
+                      </div>
+                    )}
+                  </div>
+                ))}
+                <div style={{marginTop:'12px',fontSize:'13px',color:'var(--text-muted)',textAlign:'center'}}>
+                  📝 작성한 사람: {bookReviews.length}/{members.length}명
                 </div>
               </div>
             )}
