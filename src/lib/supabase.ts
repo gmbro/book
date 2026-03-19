@@ -125,3 +125,10 @@ export interface ReviewComment {
   content: string;
   created_at: string;
 }
+
+export interface MeetingAttendee {
+  id: string;
+  meeting_id: string;
+  member_id: string;
+  created_at: string;
+}

@@ -2,7 +2,7 @@
 
 import { useEffect, useState, use } from 'react';
 import { useRouter } from 'next/navigation';
-import { supabase, Member, Meeting, DiscussionItem, MeetingRecord, BookReview, ReviewLike, ReviewComment } from '@/lib/supabase';
+import { supabase, Member, Meeting, DiscussionItem, MeetingRecord, BookReview, ReviewLike, ReviewComment, MeetingAttendee } from '@/lib/supabase';
 
 /* SVG 아이콘 */
 const Icons = {
@@ -12,6 +12,12 @@ const Icons = {
   mic: <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" y1="19" x2="12" y2="23"/></svg>,
   star: <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>,
   search: <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>,
+  calendar: <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>,
+  mapPin: <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/></svg>,
+  users: <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>,
+  check: <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="20 6 9 17 4 12"/></svg>,
+  megaphone: <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M3 11l18-5v12L3 13v-2z"/><path d="M11.6 16.8a3 3 0 1 1-5.8-1.6"/></svg>,
+  userCheck: <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M16 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="8.5" cy="7" r="4"/><polyline points="17 11 19 13 23 9"/></svg>,
 };
 
 interface BookResult {
@@ -59,6 +65,7 @@ export default function MeetingDetailPage({ params }: { params: Promise<{ id: st
   // 모임 상세 안내 편집
   const [editingInfo, setEditingInfo] = useState(false);
   const [infoForm, setInfoForm] = useState({ location: '', max_members: '', conditions: '', notice: '' });
+  const [attendees, setAttendees] = useState<MeetingAttendee[]>([]);
 
   const generateAiDiscussion = async () => {
     if (!meeting?.book_title) { alert('도서 선정부터 해주세요!'); return; }
@@ -521,6 +528,17 @@ export default function MeetingDetailPage({ params }: { params: Promise<{ id: st
   // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => { if (bookReviews.length > 0) loadLikesComments(); }, [bookReviews.length]);
 
+  // 참여자 로드
+  useEffect(() => {
+    if (!id) return;
+    if (useLocal) {
+      const stored = JSON.parse(localStorage.getItem(`meeting-attendees-${id}`) || '[]');
+      setAttendees(stored);
+    } else {
+      supabase.from('meeting_attendees').select('*').eq('meeting_id', id).then(({ data }) => setAttendees(data || []));
+    }
+  }, [id, useLocal]);
+
   const toggleLike = async (reviewId: string) => {
     if (!currentUser) return;
     const existing = reviewLikes.find(l => l.review_id === reviewId && l.member_id === currentUser.id);
@@ -629,7 +647,7 @@ export default function MeetingDetailPage({ params }: { params: Promise<{ id: st
               {editingInfo ? (
                 <div style={{display:'flex',flexDirection:'column',gap:'8px'}}>
                   <input className="input" placeholder="장소 (예: 스타벅스 강남역점)" value={infoForm.location} onChange={e => setInfoForm({...infoForm, location: e.target.value})}/>
-                  <input className="input" placeholder="참여인원 (예: 10)" type="number" value={infoForm.max_members} onChange={e => setInfoForm({...infoForm, max_members: e.target.value})}/>
+                  <input className="input" placeholder="최대 참여인원 (예: 10)" type="number" value={infoForm.max_members} onChange={e => setInfoForm({...infoForm, max_members: e.target.value})}/>
                   <input className="input" placeholder="참여조건 (예: 독후감 필수)" value={infoForm.conditions} onChange={e => setInfoForm({...infoForm, conditions: e.target.value})}/>
                   <textarea className="input" placeholder="공지사항" value={infoForm.notice} onChange={e => setInfoForm({...infoForm, notice: e.target.value})} style={{minHeight:'60px',resize:'vertical',fontFamily:'inherit'}}/>
                   <div style={{display:'flex',gap:'6px',justifyContent:'flex-end'}}>
@@ -656,31 +674,88 @@ export default function MeetingDetailPage({ params }: { params: Promise<{ id: st
                   </div>
                 </div>
               ) : (
-                <div style={{display:'flex',flexDirection:'column',gap:'6px',fontSize:'13px',lineHeight:'1.5'}}>
+                <div style={{display:'flex',flexDirection:'column',gap:'10px',fontSize:'13px',lineHeight:'1.5'}}>
                   <div style={{display:'flex',alignItems:'flex-start',gap:'8px'}}>
-                    <span style={{flexShrink:0,width:'16px',textAlign:'center'}}>📅</span>
+                    <span style={{flexShrink:0,width:'16px',marginTop:'1px',color:'var(--accent)'}}>{Icons.calendar}</span>
                     <div>
                       <span style={{fontWeight:600}}>모임일정</span>
                       <div style={{color:'var(--text-sub)',marginTop:'2px'}}>{meeting.date ? new Date(meeting.date + 'T00:00:00').toLocaleDateString('ko', {year:'numeric',month:'long',day:'numeric',weekday:'short'}) : '미정'} {meeting.time || ''}</div>
                     </div>
                   </div>
                   <div style={{display:'flex',alignItems:'flex-start',gap:'8px'}}>
-                    <span style={{flexShrink:0,width:'16px',textAlign:'center'}}>📍</span>
+                    <span style={{flexShrink:0,width:'16px',marginTop:'1px',color:'var(--accent)'}}>{Icons.mapPin}</span>
                     <div>
                       <span style={{fontWeight:600}}>장소</span>
                       <div style={{color:'var(--text-sub)',marginTop:'2px'}}>{meeting.location || '미정'}</div>
                     </div>
                   </div>
                   <div style={{display:'flex',alignItems:'flex-start',gap:'8px'}}>
-                    <span style={{flexShrink:0,width:'16px',textAlign:'center'}}>👥</span>
-                    <div>
-                      <span style={{fontWeight:600}}>참여인원</span>
-                      <div style={{color:'var(--text-sub)',marginTop:'2px'}}>{meeting.max_members ? `최대 ${meeting.max_members}명` : '제한 없음'}</div>
+                    <span style={{flexShrink:0,width:'16px',marginTop:'1px',color:'var(--accent)'}}>{Icons.users}</span>
+                    <div style={{flex:1}}>
+                      <div style={{display:'flex',alignItems:'center',gap:'6px'}}>
+                        <span style={{fontWeight:600}}>참여인원</span>
+                        <span style={{fontSize:'12px',color:'var(--accent)',fontWeight:600}}>{attendees.length}{meeting.max_members ? `/${meeting.max_members}` : ''}명</span>
+                      </div>
+                      {attendees.length > 0 && (
+                        <div style={{display:'flex',flexWrap:'wrap',gap:'4px',marginTop:'6px'}}>
+                          {attendees.map(a => (
+                            <span key={a.id} style={{background:'var(--bg-input)',border:'1px solid var(--border)',borderRadius:'12px',padding:'2px 8px',fontSize:'11px',color:'var(--text-sub)'}}>{getName(a.member_id)}</span>
+                          ))}
+                        </div>
+                      )}
+                      {(() => {
+                        const isAttending = attendees.some(a => a.member_id === currentUser?.id);
+                        const isFull = meeting.max_members ? attendees.length >= meeting.max_members : false;
+                        return (
+                          <button
+                            onClick={async () => {
+                              if (!currentUser) return;
+                              if (isAttending) {
+                                // 참여 취소
+                                if (useLocal) {
+                                  setAttendees(prev => prev.filter(a => a.member_id !== currentUser.id));
+                                  const key = `meeting-attendees-${id}`;
+                                  const stored = JSON.parse(localStorage.getItem(key) || '[]');
+                                  localStorage.setItem(key, JSON.stringify(stored.filter((a: MeetingAttendee) => a.member_id !== currentUser.id)));
+                                } else {
+                                  await supabase.from('meeting_attendees').delete().eq('meeting_id', id).eq('member_id', currentUser.id);
+                                  const { data } = await supabase.from('meeting_attendees').select('*').eq('meeting_id', id);
+                                  setAttendees(data || []);
+                                }
+                              } else {
+                                if (isFull) { alert('참여 인원이 다 찼습니다!'); return; }
+                                // 참여 등록
+                                const newA: MeetingAttendee = { id: `a-${Date.now()}`, meeting_id: id as string, member_id: currentUser.id, created_at: new Date().toISOString() };
+                                if (useLocal) {
+                                  setAttendees(prev => [...prev, newA]);
+                                  const key = `meeting-attendees-${id}`;
+                                  const stored = JSON.parse(localStorage.getItem(key) || '[]');
+                                  localStorage.setItem(key, JSON.stringify([...stored, newA]));
+                                } else {
+                                  await supabase.from('meeting_attendees').insert({ meeting_id: id, member_id: currentUser.id });
+                                  const { data } = await supabase.from('meeting_attendees').select('*').eq('meeting_id', id);
+                                  setAttendees(data || []);
+                                }
+                              }
+                            }}
+                            style={{
+                              marginTop:'8px',
+                              display:'flex',alignItems:'center',gap:'5px',
+                              padding:'6px 14px',borderRadius:'8px',border:'none',cursor:'pointer',
+                              fontSize:'12px',fontWeight:600,fontFamily:'inherit',
+                              background: isAttending ? 'var(--bg-input)' : 'var(--accent)',
+                              color: isAttending ? 'var(--text-sub)' : 'white',
+                            }}
+                          >
+                            {isAttending ? <>{Icons.check} 참여 취소</> : <>{Icons.userCheck} 참여하기</>}
+                          </button>
+                        );
+                      })()}
                     </div>
                   </div>
                   {meeting.conditions && (
                     <div style={{display:'flex',alignItems:'flex-start',gap:'8px'}}>
-                      <span style={{flexShrink:0,width:'16px',textAlign:'center'}}>✅</span>
+                      <span style={{flexShrink:0,width:'16px',marginTop:'1px',color:'var(--accent)'}}>{Icons.check}</span>
                       <div>
                         <span style={{fontWeight:600}}>참여조건</span>
                         <div style={{color:'var(--text-sub)',marginTop:'2px'}}>{meeting.conditions}</div>
@@ -689,7 +764,7 @@ export default function MeetingDetailPage({ params }: { params: Promise<{ id: st
                   )}
                   {meeting.notice && (
                     <div style={{display:'flex',alignItems:'flex-start',gap:'8px'}}>
-                      <span style={{flexShrink:0,width:'16px',textAlign:'center'}}>📢</span>
+                      <span style={{flexShrink:0,width:'16px',marginTop:'1px',color:'var(--accent)'}}>{Icons.megaphone}</span>
                       <div>
                         <span style={{fontWeight:600}}>공지사항</span>
                         <div style={{color:'var(--text-sub)',marginTop:'2px',whiteSpace:'pre-line'}}>{meeting.notice}</div>

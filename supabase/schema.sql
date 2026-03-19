@@ -152,3 +152,15 @@ CREATE TABLE review_comments (
 
 ALTER TABLE review_comments ENABLE ROW LEVEL SECURITY;
 CREATE POLICY "Allow all for review_comments" ON review_comments FOR ALL USING (true) WITH CHECK (true);
+
+-- 모임 참여 등록
+CREATE TABLE meeting_attendees (
+  id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+  meeting_id UUID NOT NULL REFERENCES meetings(id) ON DELETE CASCADE,
+  member_id UUID NOT NULL REFERENCES members(id) ON DELETE CASCADE,
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  UNIQUE(meeting_id, member_id)
+);
+
+ALTER TABLE meeting_attendees ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "Allow all for meeting_attendees" ON meeting_attendees FOR ALL USING (true) WITH CHECK (true);
