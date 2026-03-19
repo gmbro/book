@@ -30,7 +30,7 @@ export default function MeetingDetailPage({ params }: { params: Promise<{ id: st
   const [records, setRecords] = useState<{id:string;content:string;author:string;created_at:string}[]>([]);
   const [members, setMembers] = useState<Member[]>([]);
   const [useLocal, setUseLocal] = useState(false);
-  const [activeTab, setActiveTab] = useState<'book' | 'disc' | 'review' | 'rec'>('book');
+  const [activeTab, setActiveTab] = useState<'info' | 'book' | 'disc' | 'review' | 'rec'>('info');
 
   // 독후감
   const [bookReviews, setBookReviews] = useState<BookReview[]>([]);
@@ -601,17 +601,17 @@ export default function MeetingDetailPage({ params }: { params: Promise<{ id: st
 
         {/* 탭 */}
         <div className="tabs">
+          <button className={`tab ${activeTab === 'info' ? 'on' : ''}`} onClick={() => setActiveTab('info')}>모임안내</button>
           <button className={`tab ${activeTab === 'book' ? 'on' : ''}`} onClick={() => setActiveTab('book')}>도서</button>
           <button className={`tab ${activeTab === 'disc' ? 'on' : ''}`} onClick={() => setActiveTab('disc')}>발제문</button>
           <button className={`tab ${activeTab === 'review' ? 'on' : ''}`} onClick={() => setActiveTab('review')}>독후감</button>
           <button className={`tab ${activeTab === 'rec' ? 'on' : ''}`} onClick={() => setActiveTab('rec')}>기록</button>
         </div>
 
-        {/* ===== 도서 탭 ===== */}
-        {activeTab === 'book' && (
-          <div>
-            {/* 모임 상세 안내 */}
-            <div className="section" style={{marginBottom:'12px'}}>
+        {/* ===== 모임안내 탭 ===== */}
+        {activeTab === 'info' && (
+          <div className="rec-panel">
+            <div className="section" style={{marginBottom:0}}>
               <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:'10px'}}>
                 <div className="section-title" style={{marginBottom:0}}>모임 안내</div>
                 {isLeader && !editingInfo && (
@@ -699,6 +699,12 @@ export default function MeetingDetailPage({ params }: { params: Promise<{ id: st
                 </div>
               )}
             </div>
+          </div>
+        )}
+
+        {/* ===== 도서 탭 ===== */}
+        {activeTab === 'book' && (
+          <div>
             <div className="section">
               <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:'10px'}}>
                 <div className="section-title" style={{marginBottom:0}}>{Icons.book} 선정 도서</div>
