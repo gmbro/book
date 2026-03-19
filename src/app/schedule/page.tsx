@@ -589,7 +589,7 @@ export default function SchedulePage() {
 
         {/* 일정 투표 카드 */}
         {polls.length > 0 && (
-          <div className="section-title" style={{marginTop:'8px'}}>{Icons.poll} 일정 투표 <span style={{fontSize:'12px',fontWeight:500,color:'var(--accent)',background:'var(--accent-light, rgba(99,102,241,0.1))',borderRadius:'10px',padding:'1px 8px',marginLeft:'4px'}}>{polls.length}</span></div>
+          <div style={{fontSize:'18px',fontWeight:700,margin:'16px 0 8px',display:'flex',alignItems:'center',gap:'6px'}}>📊 일정 투표 <span style={{fontSize:'16px',fontWeight:600,color:'var(--accent)'}}>{polls.length}개 등록</span></div>
         )}
         {polls.map(p => {
           const uv = user ? p.votes.find(v => v.member_id === user.id)?.vote : null;
