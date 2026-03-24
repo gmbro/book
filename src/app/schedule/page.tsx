@@ -678,7 +678,6 @@ export default function SchedulePage() {
     if (!winner) return;
     setConfirmAction({msg:`"${winner.book_title}"을(를) 도서로 확정하시겠습니까?`, action: async () => {
       if (poll.meeting_id) {
-        // 모임에 도서 자동 연결
         if (useLocal) {
           const um = meetings.map(m => m.id === poll.meeting_id ? { ...m, book_title: winner.book_title, book_author: winner.book_author } : m);
           setMeetings(um); saveMeetings(um);
@@ -686,7 +685,6 @@ export default function SchedulePage() {
           await supabase.from('meetings').update({ book_title: winner.book_title, book_author: winner.book_author }).eq('id', poll.meeting_id);
         }
       }
-      // 상태 변경
       if (useLocal) {
         const up = bookPolls.map(bp => bp.id === pollId ? { ...bp, status: 'confirmed' as const } : bp);
         setBookPolls(up); saveBookPolls(up);
@@ -723,164 +721,193 @@ export default function SchedulePage() {
           </div>
         )}
 
-        {/* 탭 네비게이션 */}
-        <div className="sch-tabs">
-          <button className={`sch-tab ${activeTab==='calendar'?'on':''}`} onClick={() => setActiveTab('calendar')}>달력</button>
-          <button className={`sch-tab ${activeTab==='votes'?'on':''}`} onClick={() => setActiveTab('votes')}>
-            투표 {(() => { const now = new Date(); const ac = polls.filter(p => !p.deadline || new Date(p.deadline) >= now).length + bookPolls.filter(bp => bp.status === 'active' && (!bp.deadline || new Date(bp.deadline) >= now)).length; return ac > 0 ? <span className="sch-tab-badge">{ac}</span> : null; })()}
-          </button>
-          <button className={`sch-tab ${activeTab==='meetings'?'on':''}`} onClick={() => setActiveTab('meetings')}>
-            모임 {meetings.length > 0 && <span className="sch-tab-badge">{meetings.length}</span>}
-          </button>
-        </div>
+        {/* ===== 주간 스트립 달력 ===== */}
+        {(() => {
+          const weekOffset = (form.weekOffset as number) || 0;
+          const today = new Date();
+          const startOfWeek = new Date(today);
+          startOfWeek.setDate(today.getDate() - today.getDay() + weekOffset * 7);
+          const weekDays = Array.from({length:7}, (_,i) => {
+            const d = new Date(startOfWeek);
+            d.setDate(startOfWeek.getDate() + i);
+            return d;
+          });
+          const fmtD = (d:Date) => `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+          const todayStr = fmtD(today);
+          const monthLabel = (() => {
+            const months = new Set(weekDays.map(d => `${d.getFullYear()}년 ${d.getMonth()+1}월`));
+            return [...months].join(' · ');
+          })();
+          const selectedDate = (form.selectedDate as string) || todayStr;
 
-        {/* === 다음 모임 탭 === */}
-        {activeTab === 'meetings' && (
-          <>
-            {meetings.length === 0 ? (
-              <div className="empty">등록된 모임이 없습니다</div>
-            ) : (
-              meetings.map(m => (
-                <div key={m.id} className="meeting-item" onClick={() => router.push(`/meeting/${m.id}`)}>
-                  <div className="meeting-badge">
-                    <span className="mm">{m.date ? new Date(m.date+'T00:00:00').toLocaleDateString('ko',{month:'short'}) : ''}</span>
-                    <span className="dd">{m.date ? new Date(m.date+'T00:00:00').getDate() : '?'}</span>
+          return (
+            <div className="section" style={{padding:'12px 14px'}}>
+              <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:'10px'}}>
+                <button className="kr-cal-arrow" onClick={() => setForm({...form, weekOffset: weekOffset - 1})}>
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="15 18 9 12 15 6"/></svg>
+                </button>
+                <span style={{fontSize:'13px',fontWeight:600,color:'var(--text)'}}>{monthLabel}</span>
+                <div style={{display:'flex',gap:'4px',alignItems:'center'}}>
+                  {weekOffset !== 0 && (
+                    <button style={{fontSize:'10px',padding:'3px 8px',border:'1px solid var(--accent)',background:'var(--accent-soft)',color:'var(--accent)',borderRadius:'12px',cursor:'pointer',fontFamily:'inherit',fontWeight:600}} onClick={() => setForm({...form, weekOffset:0, selectedDate:todayStr})}>오늘</button>
+                  )}
+                  <button className="kr-cal-arrow" onClick={() => setForm({...form, weekOffset: weekOffset + 1})}>
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="9 18 15 12 9 6"/></svg>
+                  </button>
+                </div>
+              </div>
+              <div style={{display:'grid',gridTemplateColumns:'repeat(7,1fr)',gap:'2px'}}>
+                {['일','월','화','수','목','금','토'].map((wd,i) => (
+                  <div key={wd} style={{textAlign:'center',fontSize:'10px',fontWeight:600,color:i===0?'var(--red)':i===6?'#3b82f6':'var(--text-muted)',paddingBottom:'4px'}}>{wd}</div>
+                ))}
+                {weekDays.map((d,i) => {
+                  const ds = fmtD(d);
+                  const isToday = ds === todayStr;
+                  const isSel = ds === selectedDate;
+                  const hasConf = confirmedDates.includes(ds);
+                  const hasProp = proposedDates.includes(ds);
+                  return (
+                    <button key={i} onClick={() => setForm({...form, selectedDate: ds})} style={{
+                      display:'flex',flexDirection:'column',alignItems:'center',gap:'2px',
+                      padding:'6px 0',border:'none',borderRadius:'10px',cursor:'pointer',fontFamily:'inherit',
+                      background: isSel ? 'var(--accent)' : isToday ? 'var(--accent-soft)' : 'transparent',
+                      transition:'all 0.15s',
+                    }}>
+                      <span style={{fontSize:'13px',fontWeight:isToday||isSel?700:500,color:isSel?'#fff':i===0?'var(--red)':i===6?'#3b82f6':'var(--text)'}}>{d.getDate()}</span>
+                      <div style={{display:'flex',gap:'2px',height:'5px'}}>
+                        {hasConf && <span style={{width:'5px',height:'5px',borderRadius:'50%',background:isSel?'#fff':'var(--green)'}} />}
+                        {hasProp && !hasConf && <span style={{width:'5px',height:'5px',borderRadius:'50%',background:isSel?'rgba(255,255,255,0.6)':'var(--accent)'}} />}
+                      </div>
+                    </button>
+                  );
+                })}
+              </div>
+              {/* 선택된 날짜의 모임 */}
+              {(() => {
+                const sel = selectedDate;
+                const dayMeetings = meetings.filter(m => m.date === sel);
+                if (dayMeetings.length === 0) return (
+                  <div style={{marginTop:'10px',padding:'10px',background:'var(--bg-input)',borderRadius:'8px',textAlign:'center',fontSize:'12px',color:'var(--text-muted)'}}>
+                    {new Date(sel+'T00:00:00').toLocaleDateString('ko',{month:'long',day:'numeric',weekday:'long'})} — 일정 없음
                   </div>
-                  <div className="meeting-info">
-                    <h4>{m.date ? new Date(m.date+'T00:00:00').toLocaleDateString('ko',{month:'long',day:'numeric',weekday:'short'}) : '미정'}</h4>
-                    <p>{m.time||'시간 미정'} · {m.book_title||'도서 미선정'}</p>
+                );
+                return dayMeetings.map(m => (
+                  <div key={m.id} style={{marginTop:'10px',padding:'12px',background:'var(--green-soft)',borderRadius:'10px',cursor:'pointer'}} onClick={() => router.push(`/meeting/${m.id}`)}>
+                    <div style={{display:'flex',justifyContent:'space-between',alignItems:'center'}}>
+                      <div style={{display:'flex',alignItems:'center',gap:'8px'}}>
+                        {Icons.calendar}
+                        <div>
+                          <div style={{fontSize:'13px',fontWeight:600}}>{new Date(m.date+'T00:00:00').toLocaleDateString('ko',{month:'long',day:'numeric',weekday:'short'})}</div>
+                          <div style={{fontSize:'11px',color:'var(--text-sub)'}}>{m.time||'시간 미정'} · {m.book_title||'도서 미선정'}</div>
+                        </div>
+                      </div>
+                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--text-muted)" strokeWidth="2"><polyline points="9 18 15 12 9 6"/></svg>
+                    </div>
                   </div>
-                  <div style={{display:'flex',alignItems:'center',gap:'4px',flexWrap:'wrap'}}>
-                    {m.status==='completed' && <span className="badge badge-completed">완료</span>}
-                    {isLeader && (
-                      <>
-                        <button className="btn-danger-sm" style={{fontSize:'10px',padding:'2px 8px',background:'var(--bg-input)',color:'var(--text-sub)',border:'1px solid var(--border)'}} onClick={(e) => { e.stopPropagation(); setForm({editMeetingId:m.id,date:m.date||'',time:m.time||'',bookTitle:m.book_title||''}); setModal('editMeeting'); }}>수정</button>
-                        <button className="btn-danger-sm" style={{fontSize:'10px',padding:'2px 6px'}} onClick={(e) => { e.stopPropagation(); handleDeleteMeeting(m.id); }}>삭제</button>
-                      </>
-                    )}
+                ));
+              })()}
+            </div>
+          );
+        })()}
+
+        {/* ===== 다음 모임 카드 ===== */}
+        {meetings.length > 0 && (() => {
+          const next = meetings[0];
+          return (
+            <div className="section" style={{padding:'14px',cursor:'pointer'}} onClick={() => router.push(`/meeting/${next.id}`)}>
+              <div style={{display:'flex',alignItems:'center',gap:'8px',marginBottom:'8px'}}>
+                {Icons.calendar}
+                <span style={{fontSize:'12px',fontWeight:600,color:'var(--text-sub)',letterSpacing:'0.5px'}}>다음 모임</span>
+                {isLeader && (
+                  <div style={{marginLeft:'auto',display:'flex',gap:'4px'}}>
+                    <button className="btn-danger-sm" style={{fontSize:'10px',padding:'2px 8px',background:'var(--bg-input)',color:'var(--text-sub)',border:'1px solid var(--border)'}} onClick={(e) => { e.stopPropagation(); setForm({editMeetingId:next.id,date:next.date||'',time:next.time||'',bookTitle:next.book_title||''}); setModal('editMeeting'); }}>수정</button>
+                    <button className="btn-danger-sm" style={{fontSize:'10px',padding:'2px 6px'}} onClick={(e) => { e.stopPropagation(); handleDeleteMeeting(next.id); }}>삭제</button>
+                  </div>
+                )}
+              </div>
+              <div style={{display:'flex',alignItems:'center',gap:'12px'}}>
+                <div className="meeting-badge" style={{width:'48px',height:'48px'}}>
+                  <span className="mm">{next.date ? new Date(next.date+'T00:00:00').toLocaleDateString('ko',{month:'short'}) : ''}</span>
+                  <span className="dd">{next.date ? new Date(next.date+'T00:00:00').getDate() : '?'}</span>
+                </div>
+                <div style={{flex:1}}>
+                  <div style={{fontSize:'15px',fontWeight:600}}>{next.date ? new Date(next.date+'T00:00:00').toLocaleDateString('ko',{month:'long',day:'numeric',weekday:'short'}) : '미정'}</div>
+                  <div style={{fontSize:'12px',color:'var(--text-sub)',marginTop:'2px',display:'flex',alignItems:'center',gap:'6px'}}>
+                    {Icons.clock} {next.time||'시간 미정'}
+                    <span style={{color:'var(--border)'}}>·</span>
+                    {Icons.book} {next.book_title||'도서 미선정'}
                   </div>
                 </div>
-              ))
-            )}
-            {isLeader && (
-              <button className="btn btn-outline btn-full" style={{marginTop:'10px',gap:'6px'}} onClick={() => { setForm({entries:[]}); setModal('register'); }}>{Icons.calendar} 모임 등록하기</button>
-            )}
-          </>
-        )}
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--text-muted)" strokeWidth="2"><polyline points="9 18 15 12 9 6"/></svg>
+              </div>
+            </div>
+          );
+        })()}
 
-        {/* === 달력 탭 === */}
-        {activeTab === 'calendar' && (
-          <Calendar proposedDates={proposedDates} confirmedDates={confirmedDates} onDateClick={handleCalendarDateClick} />
-        )}
-
-        {/* === 투표 탭 === */}
-        {activeTab === 'votes' && (
-          <>
-
-        {/* ===== 투표 카드 렌더 함수 ===== */}
+        {/* ===== 진행중 투표 ===== */}
         {(() => {
           const now = new Date();
-          const activePolls = polls.filter(p => {
-            const dl = p.deadline ? new Date(p.deadline) : null;
-            return !dl || dl >= now;
-          });
-          const expiredPolls = polls.filter(p => {
-            const dl = p.deadline ? new Date(p.deadline) : null;
-            return dl && dl < now;
-          }).sort((a, b) => new Date(b.deadline!).getTime() - new Date(a.deadline!).getTime());
+          const activePolls = polls.filter(p => { const dl = p.deadline ? new Date(p.deadline) : null; return !dl || dl >= now; });
+          const expiredPolls = polls.filter(p => { const dl = p.deadline ? new Date(p.deadline) : null; return dl && dl < now; }).sort((a,b) => new Date(b.deadline!).getTime() - new Date(a.deadline!).getTime());
+          const activeBookPolls = bookPolls.filter(bp => bp.status === 'active' && (!bp.deadline || new Date(bp.deadline) >= now));
+          const pastBookPolls = bookPolls.filter(bp => bp.status !== 'active' || (bp.deadline && new Date(bp.deadline) < now));
+          const totalActive = activePolls.length + activeBookPolls.length;
 
           const renderPollCard = (p: PollWithVotes) => {
             const uv = user ? p.votes.find(v => v.member_id === user.id)?.vote : null;
             const yesVotes = p.votes.filter(v => v.vote === 'participate');
             const noVotes = p.votes.filter(v => v.vote === 'not_participate');
             const totalVoters = members.length;
-            const totalVoted = p.votes.length;
-            const yesPercent = totalVoters > 0 ? Math.round((yesVotes.length / totalVoters) * 100) : 0;
-            const noPercent = totalVoters > 0 ? Math.round((noVotes.length / totalVoters) * 100) : 0;
+            const yesPercent = totalVoters > 0 ? Math.round((yesVotes.length / totalVoters)*100) : 0;
+            const noPercent = totalVoters > 0 ? Math.round((noVotes.length / totalVoters)*100) : 0;
             const canManage = p.created_by === user?.id || isLeader;
             const deadlineDate = p.deadline ? new Date(p.deadline) : null;
             const isExpired = deadlineDate ? deadlineDate < now : false;
             const diffMs = deadlineDate ? deadlineDate.getTime() - now.getTime() : 0;
             const diffDays = Math.ceil(diffMs / (1000*60*60*24));
-            const diffHours = Math.ceil(diffMs / (1000*60*60));
+
             return (
-              <div key={p.id} className="poll-card">
+              <div key={p.id} className="poll-card" style={{marginBottom:'8px'}}>
                 <div className="poll-header">
                   <div className="poll-header-left">
                     <div className="poll-icon-wrap">{Icons.poll}</div>
                     <div>
                       <div className="poll-title">{p.title}</div>
-                      <div className="poll-meta">{p.creatorName} · {totalVoted}/{totalVoters}명 투표</div>
+                      <div className="poll-meta">{getName(p.created_by)}</div>
                     </div>
                   </div>
-                  {canManage && (
-                    <div style={{display:'flex',gap:'2px'}}>
-                      {!isExpired && <button className="del-btn" title="수정" onClick={() => {
-                        setForm({
-                          editPollId: p.id, pollLocation: p.title,
-                          pollDesc: p.description?.split('\n\n📅')[0] || '',
-                          pollSchedules: [{date:'',time:'오후 3시'}],
-                        });
-                        setModal('editPoll');
-                      }}>{Icons.edit}</button>}
+                  {canManage && !isExpired && (
+                    <div style={{display:'flex',gap:'4px'}}>
+                      <button className="del-btn" onClick={() => { setForm({editPollId:p.id,pollLocation:'',pollDesc:p.description||'',pollSchedules:[{date:'',time:'오후 3시'}],pollDeadline:p.deadline?p.deadline.slice(0,10):''}); setModal('editPoll'); }}>{Icons.settings}</button>
                       <button className="del-btn" onClick={() => handleDeletePoll(p.id)}>✕</button>
                     </div>
                   )}
                 </div>
-                {p.description && <div className="poll-desc">{p.description}</div>}
-                {deadlineDate && (
-                  <div className={`poll-deadline ${isExpired?'expired':''}`}>
-                    {Icons.clock}
-                    <span>{isExpired ? '투표 마감' : diffDays > 0 ? `${diffDays}일 남음` : `${diffHours}시간 남음`}</span>
-                    <span className="poll-deadline-date">{deadlineDate.toLocaleDateString('ko',{month:'long',day:'numeric'})} {deadlineDate.toLocaleTimeString('ko',{hour:'2-digit',minute:'2-digit'})}</span>
+                {!isExpired && deadlineDate && (
+                  <div className="deadline-bar" style={{padding:'0 16px'}}>
+                    {Icons.clock} 마감 D-{diffDays > 0 ? diffDays : 0}
                   </div>
                 )}
-                <div className="poll-results">
-                  <div className="poll-option">
-                    <div className="poll-option-head">
-                      <span className="poll-option-label">참여</span>
-                      <span className="poll-option-count">{yesVotes.length}명 ({yesPercent}%)</span>
-                    </div>
-                    <div className="poll-bar"><div className="poll-bar-fill yes" style={{width:`${yesPercent}%`}} /></div>
-                    {yesVotes.length > 0 && (
-                      <div className="poll-voters">{yesVotes.map(v => <span key={v.id} className="poll-voter yes">{getName(v.member_id)}</span>)}</div>
-                    )}
+                {isExpired && <div className="deadline-bar expired" style={{padding:'0 16px'}}>{Icons.clock} 마감됨</div>}
+                <div className="poll-body">
+                  {p.description && <div className="poll-desc">{p.description}</div>}
+                  <div className="poll-progress">
+                    <div className="poll-bar"><div className="poll-bar-fill yes" style={{width:`${yesPercent}%`}} /><div className="poll-bar-fill no" style={{width:`${noPercent}%`}} /></div>
+                    <div className="poll-bar-labels"><span>참여 {yesVotes.length}</span><span>미참 {noVotes.length}</span></div>
                   </div>
-                  <div className="poll-option">
-                    <div className="poll-option-head">
-                      <span className="poll-option-label">미참여</span>
-                      <span className="poll-option-count">{noVotes.length}명 ({noPercent}%)</span>
-                    </div>
-                    <div className="poll-bar"><div className="poll-bar-fill no" style={{width:`${noPercent}%`}} /></div>
-                    {noVotes.length > 0 && (
-                      <div className="poll-voters">{noVotes.map(v => <span key={v.id} className="poll-voter no">{getName(v.member_id)}</span>)}</div>
-                    )}
-                  </div>
-                  {(() => {
-                    const votedIds = new Set(p.votes.map(v => v.member_id));
-                    const notVoted = members.filter(m => !votedIds.has(m.id));
-                    return notVoted.length > 0 ? (
-                      <div className="poll-not-voted">
-                        <span className="poll-not-voted-label">미투표 ({notVoted.length})</span>
-                        <div className="poll-voters">{notVoted.map(m => <span key={m.id} className="poll-voter muted">{m.name}</span>)}</div>
-                      </div>
-                    ) : null;
-                  })()}
+                  {yesVotes.length > 0 && <div className="poll-voters">{yesVotes.map(v => <span key={v.id} className="poll-voter yes">{getName(v.member_id)}</span>)}</div>}
+                  {noVotes.length > 0 && <div className="poll-voters">{noVotes.map(v => <span key={v.id} className="poll-voter no">{getName(v.member_id)}</span>)}</div>}
                 </div>
                 {!isExpired && (
-                  <div className="poll-actions">
-                    <button className={`poll-action-btn participate ${uv==='participate'?'active':''}`} onClick={() => handlePollVote(p.id,'participate')}>
-                      {Icons.check} 참여
-                    </button>
-                    <button className={`poll-action-btn not-participate ${uv==='not_participate'?'active':''}`} onClick={() => handlePollVote(p.id,'not_participate')}>
-                      {Icons.x} 미참여
-                    </button>
+                  <div className="poll-footer">
+                    <button className={`vote-btn ${uv==='participate'?'on-yes':''}`} onClick={() => handlePollVote(p.id,'participate')}>{Icons.check} 참여</button>
+                    <button className={`vote-btn ${uv==='not_participate'?'on-no':''}`} onClick={() => handlePollVote(p.id,'not_participate')}>{Icons.x} 미참</button>
                   </div>
                 )}
                 {isExpired && <div className="poll-closed">투표가 마감되었습니다</div>}
                 <div className="poll-comments">
                   {p.comments.length > 0 && !expandedComments[p.id] && (
-                    <button style={{width:'100%',background:'none',border:'none',padding:'8px',cursor:'pointer',fontSize:'12px',color:'var(--text-muted)',fontFamily:'inherit',textAlign:'left'}} onClick={() => setExpandedComments(prev => ({...prev,[p.id]:true}))}>💬 {p.comments.length}개 의견 보기</button>
+                    <button style={{width:'100%',background:'none',border:'none',padding:'8px',cursor:'pointer',fontSize:'12px',color:'var(--text-muted)',fontFamily:'inherit',textAlign:'left',display:'flex',alignItems:'center',gap:'4px'}} onClick={() => setExpandedComments(prev => ({...prev,[p.id]:true}))}>{Icons.chat} {p.comments.length}개 의견 보기</button>
                   )}
                   {(expandedComments[p.id] || p.comments.length === 0) && (
                     <>
@@ -898,13 +925,7 @@ export default function SchedulePage() {
                         </div>
                       )}
                       <div className="poll-comment-input">
-                        <input
-                          className="input"
-                          placeholder="의견을 남겨주세요..."
-                          value={commentInput[p.id] || ''}
-                          onChange={e => setCommentInput(prev => ({...prev, [p.id]: e.target.value}))}
-                          onKeyDown={e => e.key === 'Enter' && handleAddComment(p.id)}
-                        />
+                        <input className="input" placeholder="의견을 남겨주세요..." value={commentInput[p.id] || ''} onChange={e => setCommentInput(prev => ({...prev, [p.id]: e.target.value}))} onKeyDown={e => e.key === 'Enter' && handleAddComment(p.id)} />
                         <button className="poll-comment-send" onClick={() => handleAddComment(p.id)}>{Icons.chat}</button>
                       </div>
                     </>
@@ -1095,12 +1116,13 @@ export default function SchedulePage() {
         })()}
 
         {/* 하단 버튼 */}
-        <div style={{display:'flex',gap:'6px',marginTop:'12px'}}>
+        <div style={{display:'flex',gap:'6px',marginTop:'14px',paddingBottom:'20px'}}>
           <button className="btn btn-accent" style={{flex:1,gap:'4px',fontSize:'12px',padding:'9px 6px'}} onClick={() => { const t=new Date(); const d=new Date(t); d.setDate(d.getDate()+3); const fmt=(x:Date)=>x.toISOString().slice(0,10); setForm({pollDate:fmt(t),pollTime:'오후 3시',pollDeadline:fmt(d)}); setModal('poll'); }}>{Icons.poll} 일정 투표</button>
           <button className="btn btn-outline" style={{flex:1,gap:'4px',fontSize:'12px',padding:'9px 6px'}} onClick={() => { const d=new Date(); d.setDate(d.getDate()+3); setForm({bookPollDeadline:d.toISOString().slice(0,10)}); setBookCandidates([]); setBookSearchQuery(''); setBookSearchResults([]); setModal('bookPoll'); }}>{Icons.book} 책 투표</button>
+          {isLeader && (
+            <button className="btn btn-outline" style={{flex:1,gap:'4px',fontSize:'12px',padding:'9px 6px'}} onClick={() => { setForm({entries:[]}); setModal('register'); }}>{Icons.calendar} 모임 등록</button>
+          )}
         </div>
-          </>
-        )}
       </div>
 
       {/* ===== 모달들 ===== */}
