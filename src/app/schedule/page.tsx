@@ -1063,13 +1063,11 @@ export default function SchedulePage() {
         })()}
 
         {/* 하단 버튼 */}
-        <div style={{display:'flex',flexDirection:'column',gap:'6px',marginTop:'12px'}}>
-          <div style={{display:'flex',gap:'6px'}}>
-            <button className="btn btn-accent" style={{flex:1,gap:'6px'}} onClick={() => { const t=new Date(); const d=new Date(t); d.setDate(d.getDate()+3); const fmt=(x:Date)=>x.toISOString().slice(0,10); setForm({pollDate:fmt(t),pollTime:'오후 3시',pollDeadline:fmt(d)}); setModal('poll'); }}>{Icons.poll} 일정 투표</button>
-            <button className="btn btn-outline" style={{flex:1,gap:'6px'}} onClick={() => { const d=new Date(); d.setDate(d.getDate()+3); setForm({bookPollDeadline:d.toISOString().slice(0,10)}); setBookCandidates([]); setBookSearchQuery(''); setBookSearchResults([]); setModal('bookPoll'); }}>{Icons.book} 책 투표</button>
-          </div>
+        <div style={{display:'flex',gap:'6px',marginTop:'12px'}}>
+          <button className="btn btn-accent" style={{flex:1,gap:'4px',fontSize:'12px',padding:'9px 6px'}} onClick={() => { const t=new Date(); const d=new Date(t); d.setDate(d.getDate()+3); const fmt=(x:Date)=>x.toISOString().slice(0,10); setForm({pollDate:fmt(t),pollTime:'오후 3시',pollDeadline:fmt(d)}); setModal('poll'); }}>{Icons.poll} 일정 투표</button>
+          <button className="btn btn-outline" style={{flex:1,gap:'4px',fontSize:'12px',padding:'9px 6px'}} onClick={() => { const d=new Date(); d.setDate(d.getDate()+3); setForm({bookPollDeadline:d.toISOString().slice(0,10)}); setBookCandidates([]); setBookSearchQuery(''); setBookSearchResults([]); setModal('bookPoll'); }}>{Icons.book} 책 투표</button>
           {isLeader && (
-            <button className="btn btn-outline btn-full" style={{gap:'6px'}} onClick={() => { setForm({entries:[]}); setModal('register'); }}>{Icons.calendar} 모임 등록하기</button>
+            <button className="btn btn-outline" style={{flex:1,gap:'4px',fontSize:'12px',padding:'9px 6px'}} onClick={() => { setForm({entries:[]}); setModal('register'); }}>{Icons.calendar} 모임 등록</button>
           )}
         </div>
       </div>

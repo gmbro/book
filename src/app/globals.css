@@ -268,6 +268,180 @@ html, body {
 .cal-day.confirmed-day { background: var(--green-soft); font-weight: 600; }
 .cal-day.confirmed-day:hover { background: rgba(46, 204, 113, 0.2); }
 
+/* ===== KOREAN CALENDAR ===== */
+.kr-calendar {
+  padding: 14px;
+  background: var(--bg-card);
+}
+
+.kr-cal-header {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  margin-bottom: 14px;
+  position: relative;
+}
+
+.kr-cal-title {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  min-width: 80px;
+}
+
+.kr-cal-year {
+  font-size: 11px;
+  color: var(--text-muted);
+  letter-spacing: 1px;
+}
+
+.kr-cal-month {
+  font-size: 20px;
+  font-weight: 700;
+  color: var(--text);
+  line-height: 1.2;
+}
+
+.kr-cal-arrow {
+  width: 32px;
+  height: 32px;
+  border: 1px solid var(--border);
+  background: var(--bg-card);
+  border-radius: 50%;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-sub);
+  transition: all 0.15s;
+  font-family: inherit;
+}
+.kr-cal-arrow:hover { background: var(--bg-hover); border-color: var(--border-hover); }
+
+.kr-cal-today {
+  position: absolute;
+  right: 0;
+  font-size: 11px;
+  padding: 4px 10px;
+  border: 1px solid var(--accent);
+  background: var(--accent-soft);
+  color: var(--accent);
+  border-radius: 14px;
+  cursor: pointer;
+  font-family: inherit;
+  font-weight: 600;
+  transition: all 0.15s;
+}
+.kr-cal-today:hover { background: var(--accent); color: white; }
+
+.kr-cal-grid {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 0;
+}
+
+.kr-cal-weekday {
+  text-align: center;
+  font-size: 11px;
+  font-weight: 600;
+  padding: 8px 0 6px;
+  color: var(--text-muted);
+  border-bottom: 2px solid var(--border);
+}
+.kr-cal-weekday.sun { color: var(--red); }
+.kr-cal-weekday.sat { color: #3b82f6; }
+
+.kr-cal-cell {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 6px 2px 4px;
+  min-height: 44px;
+  border-bottom: 1px solid var(--border);
+  transition: background 0.15s;
+}
+.kr-cal-cell:nth-child(7n+8) { border-right: none; }
+.kr-cal-cell.other { opacity: 0.25; }
+.kr-cal-cell.holiday .kr-cal-date,
+.kr-cal-cell.holiday { color: var(--red); }
+.kr-cal-cell.saturday .kr-cal-date { color: #3b82f6; }
+.kr-cal-cell.today {
+  background: var(--accent-soft);
+  border-radius: 8px;
+}
+.kr-cal-cell.today .kr-cal-date {
+  background: var(--accent);
+  color: white;
+  border-radius: 50%;
+  width: 24px;
+  height: 24px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.kr-cal-cell.confirmed {
+  background: var(--green-soft);
+  border-radius: 8px;
+}
+.kr-cal-cell.confirmed:hover {
+  background: rgba(46, 204, 113, 0.2);
+}
+
+.kr-cal-date {
+  font-size: 13px;
+  font-weight: 500;
+  line-height: 1;
+}
+
+.kr-cal-holiday-label {
+  font-size: 8px;
+  color: var(--red);
+  margin-top: 1px;
+  line-height: 1;
+  white-space: nowrap;
+}
+
+.kr-cal-indicator {
+  margin-top: 2px;
+}
+
+.kr-cal-badge {
+  display: inline-block;
+  border-radius: 6px;
+  font-size: 8px;
+  font-weight: 600;
+  line-height: 1;
+}
+.kr-cal-badge.prop {
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: var(--accent);
+}
+.kr-cal-badge.conf {
+  background: var(--green);
+  color: white;
+  padding: 2px 4px;
+  border-radius: 4px;
+}
+
+.kr-cal-legend {
+  display: flex;
+  justify-content: center;
+  gap: 16px;
+  margin-top: 10px;
+  font-size: 11px;
+  color: var(--text-muted);
+}
+
+.kr-cal-legend-item {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
 /* deadline */
 .deadline-bar { font-size: 11px; color: var(--orange); display: flex; align-items: center; gap: 4px; margin-bottom: 6px; }
 .deadline-bar.expired { color: var(--red); }
