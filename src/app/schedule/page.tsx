@@ -4,6 +4,7 @@ import { useEffect, useState, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import { supabase, Member, ScheduleProposal, ScheduleVote, Meeting, Poll, PollVote, PollComment, BookPoll, BookPollCandidate, BookPollVote } from '@/lib/supabase';
 import Calendar from '@/components/Calendar';
+import DatePicker from '@/components/DatePicker';
 
 /* ===== SVG 픽토그램 ===== */
 const Icons = {
@@ -106,6 +107,8 @@ export default function SchedulePage() {
   const [confirmAction, setConfirmAction] = useState<{msg:string;action:()=>void}|null>(null);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [showPastPolls, setShowPastPolls] = useState(false);
+  const [activeTab, setActiveTab] = useState<'meetings'|'votes'|'calendar'>('votes');
+  const [expandedComments, setExpandedComments] = useState<Record<string,boolean>>({});
 
   // 책 투표
   interface BookPollWithDetails extends BookPoll { candidates: BookPollCandidate[]; votes: BookPollVote[]; creatorName: string; }
@@ -720,37 +723,59 @@ export default function SchedulePage() {
           </div>
         )}
 
-        {/* 다음 모임 */}
-        {meetings.length > 0 && (
-          <div className="section">
-            <div className="section-title">다음 모임</div>
-            {meetings.map(m => (
-              <div key={m.id} className="meeting-item" onClick={() => router.push(`/meeting/${m.id}`)}>
-                <div className="meeting-badge">
-                  <span className="mm">{m.date ? new Date(m.date+'T00:00:00').toLocaleDateString('ko',{month:'short'}) : ''}</span>
-                  <span className="dd">{m.date ? new Date(m.date+'T00:00:00').getDate() : '?'}</span>
+        {/* 탭 네비게이션 */}
+        <div className="sch-tabs">
+          <button className={`sch-tab ${activeTab==='meetings'?'on':''}`} onClick={() => setActiveTab('meetings')}>
+            모임 {meetings.length > 0 && <span className="sch-tab-badge">{meetings.length}</span>}
+          </button>
+          <button className={`sch-tab ${activeTab==='votes'?'on':''}`} onClick={() => setActiveTab('votes')}>
+            투표 {(() => { const now = new Date(); const ac = polls.filter(p => !p.deadline || new Date(p.deadline) >= now).length + bookPolls.filter(bp => bp.status === 'active' && (!bp.deadline || new Date(bp.deadline) >= now)).length; return ac > 0 ? <span className="sch-tab-badge">{ac}</span> : null; })()}
+          </button>
+          <button className={`sch-tab ${activeTab==='calendar'?'on':''}`} onClick={() => setActiveTab('calendar')}>달력</button>
+        </div>
+
+        {/* === 다음 모임 탭 === */}
+        {activeTab === 'meetings' && (
+          <>
+            {meetings.length === 0 ? (
+              <div className="empty">등록된 모임이 없습니다</div>
+            ) : (
+              meetings.map(m => (
+                <div key={m.id} className="meeting-item" onClick={() => router.push(`/meeting/${m.id}`)}>
+                  <div className="meeting-badge">
+                    <span className="mm">{m.date ? new Date(m.date+'T00:00:00').toLocaleDateString('ko',{month:'short'}) : ''}</span>
+                    <span className="dd">{m.date ? new Date(m.date+'T00:00:00').getDate() : '?'}</span>
+                  </div>
+                  <div className="meeting-info">
+                    <h4>{m.date ? new Date(m.date+'T00:00:00').toLocaleDateString('ko',{month:'long',day:'numeric',weekday:'short'}) : '미정'}</h4>
+                    <p>{m.time||'시간 미정'} · {m.book_title||'도서 미선정'}</p>
+                  </div>
+                  <div style={{display:'flex',alignItems:'center',gap:'4px',flexWrap:'wrap'}}>
+                    {m.status==='completed' && <span className="badge badge-completed">완료</span>}
+                    {isLeader && (
+                      <>
+                        <button className="btn-danger-sm" style={{fontSize:'10px',padding:'2px 8px',background:'var(--bg-input)',color:'var(--text-sub)',border:'1px solid var(--border)'}} onClick={(e) => { e.stopPropagation(); setForm({editMeetingId:m.id,date:m.date||'',time:m.time||'',bookTitle:m.book_title||''}); setModal('editMeeting'); }}>수정</button>
+                        <button className="btn-danger-sm" style={{fontSize:'10px',padding:'2px 6px'}} onClick={(e) => { e.stopPropagation(); handleDeleteMeeting(m.id); }}>삭제</button>
+                      </>
+                    )}
+                  </div>
                 </div>
-                <div className="meeting-info">
-                  <h4>{m.date ? new Date(m.date+'T00:00:00').toLocaleDateString('ko',{month:'long',day:'numeric',weekday:'short'}) : '미정'}</h4>
-                  <p>{m.time||'시간 미정'} · {m.book_title||'도서 미선정'}</p>
-                </div>
-                <div style={{display:'flex',alignItems:'center',gap:'4px',flexWrap:'wrap'}}>
-                  {m.status==='completed' && <span className="badge badge-completed">완료</span>}
-                  {isLeader && (
-                    <>
-                      <button className="btn-danger-sm" style={{fontSize:'10px',padding:'2px 8px',background:'var(--bg-input)',color:'var(--text-sub)',border:'1px solid var(--border)'}} onClick={(e) => { e.stopPropagation(); setForm({editMeetingId:m.id,date:m.date||'',time:m.time||'',bookTitle:m.book_title||''}); setModal('editMeeting'); }}>수정</button>
-                      <button className="btn-danger-sm" style={{fontSize:'10px',padding:'2px 6px'}} onClick={(e) => { e.stopPropagation(); handleDeleteMeeting(m.id); }}>삭제</button>
-                    </>
-                  )}
-                </div>
-              </div>
-            ))}
-          </div>
+              ))
+            )}
+            {isLeader && (
+              <button className="btn btn-outline btn-full" style={{marginTop:'10px',gap:'6px'}} onClick={() => { setForm({entries:[]}); setModal('register'); }}>{Icons.calendar} 모임 등록하기</button>
+            )}
+          </>
         )}
 
-        {/* 달력 */}
-        <Calendar proposedDates={proposedDates} confirmedDates={confirmedDates} onDateClick={handleCalendarDateClick} />
+        {/* === 달력 탭 === */}
+        {activeTab === 'calendar' && (
+          <Calendar proposedDates={proposedDates} confirmedDates={confirmedDates} onDateClick={handleCalendarDateClick} />
+        )}
 
+        {/* === 투표 탭 === */}
+        {activeTab === 'votes' && (
+          <>
 
         {/* ===== 투표 카드 렌더 함수 ===== */}
         {(() => {
@@ -854,29 +879,36 @@ export default function SchedulePage() {
                 )}
                 {isExpired && <div className="poll-closed">투표가 마감되었습니다</div>}
                 <div className="poll-comments">
-                  {p.comments.length > 0 && (
-                    <div className="poll-comments-list">
-                      {p.comments.map(c => (
-                        <div key={c.id} className="poll-comment">
-                          <span className="poll-comment-name">{getName(c.member_id)}</span>
-                          <span className="poll-comment-text">{c.content}</span>
-                          {(c.member_id === user?.id || isLeader) && (
-                            <button className="poll-comment-del" onClick={() => handleDeleteComment(c.id, p.id)}>x</button>
-                          )}
-                        </div>
-                      ))}
-                    </div>
+                  {p.comments.length > 0 && !expandedComments[p.id] && (
+                    <button style={{width:'100%',background:'none',border:'none',padding:'8px',cursor:'pointer',fontSize:'12px',color:'var(--text-muted)',fontFamily:'inherit',textAlign:'left'}} onClick={() => setExpandedComments(prev => ({...prev,[p.id]:true}))}>💬 {p.comments.length}개 의견 보기</button>
                   )}
-                  <div className="poll-comment-input">
-                    <input
-                      className="input"
-                      placeholder="의견을 남겨주세요..."
-                      value={commentInput[p.id] || ''}
-                      onChange={e => setCommentInput(prev => ({...prev, [p.id]: e.target.value}))}
-                      onKeyDown={e => e.key === 'Enter' && handleAddComment(p.id)}
-                    />
-                    <button className="poll-comment-send" onClick={() => handleAddComment(p.id)}>{Icons.chat}</button>
-                  </div>
+                  {(expandedComments[p.id] || p.comments.length === 0) && (
+                    <>
+                      {p.comments.length > 0 && (
+                        <div className="poll-comments-list">
+                          {p.comments.map(c => (
+                            <div key={c.id} className="poll-comment">
+                              <span className="poll-comment-name">{getName(c.member_id)}</span>
+                              <span className="poll-comment-text">{c.content}</span>
+                              {(c.member_id === user?.id || isLeader) && (
+                                <button className="poll-comment-del" onClick={() => handleDeleteComment(c.id, p.id)}>x</button>
+                              )}
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                      <div className="poll-comment-input">
+                        <input
+                          className="input"
+                          placeholder="의견을 남겨주세요..."
+                          value={commentInput[p.id] || ''}
+                          onChange={e => setCommentInput(prev => ({...prev, [p.id]: e.target.value}))}
+                          onKeyDown={e => e.key === 'Enter' && handleAddComment(p.id)}
+                        />
+                        <button className="poll-comment-send" onClick={() => handleAddComment(p.id)}>{Icons.chat}</button>
+                      </div>
+                    </>
+                  )}
                 </div>
               </div>
             );
@@ -1066,10 +1098,9 @@ export default function SchedulePage() {
         <div style={{display:'flex',gap:'6px',marginTop:'12px'}}>
           <button className="btn btn-accent" style={{flex:1,gap:'4px',fontSize:'12px',padding:'9px 6px'}} onClick={() => { const t=new Date(); const d=new Date(t); d.setDate(d.getDate()+3); const fmt=(x:Date)=>x.toISOString().slice(0,10); setForm({pollDate:fmt(t),pollTime:'오후 3시',pollDeadline:fmt(d)}); setModal('poll'); }}>{Icons.poll} 일정 투표</button>
           <button className="btn btn-outline" style={{flex:1,gap:'4px',fontSize:'12px',padding:'9px 6px'}} onClick={() => { const d=new Date(); d.setDate(d.getDate()+3); setForm({bookPollDeadline:d.toISOString().slice(0,10)}); setBookCandidates([]); setBookSearchQuery(''); setBookSearchResults([]); setModal('bookPoll'); }}>{Icons.book} 책 투표</button>
-          {isLeader && (
-            <button className="btn btn-outline" style={{flex:1,gap:'4px',fontSize:'12px',padding:'9px 6px'}} onClick={() => { setForm({entries:[]}); setModal('register'); }}>{Icons.calendar} 모임 등록</button>
-          )}
         </div>
+          </>
+        )}
       </div>
 
       {/* ===== 모달들 ===== */}
@@ -1082,11 +1113,13 @@ export default function SchedulePage() {
             <label className="form-label">모임 날짜 및 시간</label>
             {((form.entries || []) as {date:string;time:string}[]).map((entry: {date:string;time:string}, idx: number) => (
               <div key={idx} style={{display:'flex',gap:'6px',alignItems:'center',marginBottom:'6px'}}>
-                <input className="input" type="date" style={{flex:1}} value={entry.date} onChange={e => {
-                  const entries = [...((form.entries || []) as {date:string;time:string}[])];
-                  entries[idx] = {...entries[idx], date: e.target.value};
-                  setForm({...form, entries});
-                }} />
+                <div style={{flex:1}}>
+                  <DatePicker value={entry.date} onChange={v => {
+                    const entries = [...((form.entries || []) as {date:string;time:string}[])];
+                    entries[idx] = {...entries[idx], date: v};
+                    setForm({...form, entries});
+                  }} />
+                </div>
                 <input className="input" style={{width:'100px'}} placeholder="예: 오후 3시" value={entry.time} onChange={e => {
                   const entries = [...((form.entries || []) as {date:string;time:string}[])];
                   entries[idx] = {...entries[idx], time: e.target.value};
@@ -1115,7 +1148,7 @@ export default function SchedulePage() {
               <option value="">선택</option>{proposals.map(p => <option key={p.id} value={p.id}>{p.title}</option>)}
             </select>
           </div>
-          <div className="form-group"><label className="form-label">모임 날짜</label><input className="input" type="date" value={form.date||''} onChange={e => setForm({...form,date:e.target.value})} /></div>
+          <div className="form-group"><label className="form-label">모임 날짜</label><DatePicker value={form.date||''} onChange={v => setForm({...form,date:v})} /></div>
           <div className="form-group"><label className="form-label">모임 시간</label><input className="input" placeholder="오후 3시" value={form.time||''} onChange={e => setForm({...form,time:e.target.value})} /></div>
           <div className="modal-btns"><button className="btn btn-outline" style={{flex:1}} onClick={() => setModal(null)}>취소</button><button className="btn btn-green" style={{flex:1}} onClick={handleConfirm}>확정하기</button></div>
         </div></div>
@@ -1159,13 +1192,13 @@ export default function SchedulePage() {
           <div className="form-group">
             <label className="form-label">일시</label>
             <div style={{display:'flex',gap:'6px',alignItems:'center'}}>
-              <input className="input" type="date" style={{flex:1}} value={form.pollDate||''} onChange={e => setForm({...form, pollDate: e.target.value})} />
+              <div style={{flex:1}}><DatePicker value={form.pollDate||''} onChange={v => setForm({...form, pollDate: v})} /></div>
               <input className="input" style={{width:'100px'}} placeholder="오후 3시" value={form.pollTime||'오후 3시'} onChange={e => setForm({...form, pollTime: e.target.value})} />
             </div>
           </div>
           <div className="form-group">
             <label className="form-label">투표 마감 기한</label>
-            <input className="input" type="date" value={form.pollDeadline||''} onChange={e => setForm({...form,pollDeadline:e.target.value})} />
+            <DatePicker value={form.pollDeadline||''} onChange={v => setForm({...form,pollDeadline:v})} />
           </div>
           <div className="modal-btns">
             <button className="btn btn-outline" style={{flex:1}} onClick={() => setModal(null)}>취소</button>
@@ -1188,11 +1221,11 @@ export default function SchedulePage() {
             <label className="form-label">일정</label>
             {((form.pollSchedules || [{date:'',time:'오후 3시'}]) as {date:string;time:string}[]).map((s: {date:string;time:string}, idx: number) => (
               <div key={idx} style={{display:'flex',gap:'6px',alignItems:'center',marginBottom:'6px'}}>
-                <input className="input" type="date" style={{flex:1}} value={s.date} onChange={e => {
+                <div style={{flex:1}}><DatePicker value={s.date} onChange={v => {
                   const arr = [...((form.pollSchedules || [{date:'',time:'오후 3시'}]) as {date:string;time:string}[])];
-                  arr[idx] = {...arr[idx], date: e.target.value};
+                  arr[idx] = {...arr[idx], date: v};
                   setForm({...form, pollSchedules: arr});
-                }} />
+                }} /></div>
                 <input className="input" style={{width:'100px'}} placeholder="오후 3시" value={s.time} onChange={e => {
                   const arr = [...((form.pollSchedules || [{date:'',time:'오후 3시'}]) as {date:string;time:string}[])];
                   arr[idx] = {...arr[idx], time: e.target.value};
@@ -1211,7 +1244,7 @@ export default function SchedulePage() {
           </div>
           <div className="form-group">
             <label className="form-label">투표 마감 기한</label>
-            <input className="input" type="date" value={form.pollDeadline||''} onChange={e => setForm({...form,pollDeadline:e.target.value})} />
+            <DatePicker value={form.pollDeadline||''} onChange={v => setForm({...form,pollDeadline:v})} />
           </div>
           <div className="modal-btns">
             <button className="btn btn-outline" style={{flex:1}} onClick={() => setModal(null)}>취소</button>
@@ -1222,7 +1255,7 @@ export default function SchedulePage() {
       {modal === 'editMeeting' && (
         <div className="overlay" onClick={() => setModal(null)}><div className="modal" onClick={e => e.stopPropagation()}>
           <h2>모임 수정</h2>
-          <div className="form-group"><label className="form-label">모임 날짜</label><input className="input" type="date" value={form.date||''} onChange={e => setForm({...form,date:e.target.value})} /></div>
+          <div className="form-group"><label className="form-label">모임 날짜</label><DatePicker value={form.date||''} onChange={v => setForm({...form,date:v})} /></div>
           <div className="form-group"><label className="form-label">모임 시간</label><input className="input" placeholder="오후 3시" value={form.time||''} onChange={e => setForm({...form,time:e.target.value})} /></div>
           <div className="form-group"><label className="form-label">도서명</label><input className="input" placeholder="도서명" value={form.bookTitle||''} onChange={e => setForm({...form,bookTitle:e.target.value})} /></div>
           <div className="modal-btns"><button className="btn btn-outline" style={{flex:1}} onClick={() => setModal(null)}>취소</button><button className="btn btn-accent" style={{flex:1}} onClick={handleEditMeeting}>수정</button></div>
@@ -1247,7 +1280,7 @@ export default function SchedulePage() {
           </div>
           <div className="form-group">
             <label className="form-label">마감 기한</label>
-            <input className="input" type="date" value={form.bookPollDeadline||''} onChange={e => setForm({...form,bookPollDeadline:e.target.value})} />
+            <DatePicker value={form.bookPollDeadline||''} onChange={v => setForm({...form,bookPollDeadline:v})} />
           </div>
           <div className="form-group">
             <label className="form-label">후보 도서 추가 ({bookCandidates.length}/5)</label>
