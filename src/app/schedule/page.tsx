@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
-import { supabase, Member, ScheduleProposal, ScheduleVote, Meeting, Poll, PollVote, PollComment } from '@/lib/supabase';
+import { supabase, Member, ScheduleProposal, ScheduleVote, Meeting, Poll, PollVote, PollComment, BookPoll, BookPollCandidate, BookPollVote } from '@/lib/supabase';
 import Calendar from '@/components/Calendar';
 
 /* ===== SVG 픽토그램 ===== */
@@ -105,6 +105,16 @@ export default function SchedulePage() {
   const [form, setForm] = useState<Record<string,any>>({});
   const [confirmAction, setConfirmAction] = useState<{msg:string;action:()=>void}|null>(null);
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [showPastPolls, setShowPastPolls] = useState(false);
+
+  // 책 투표
+  interface BookPollWithDetails extends BookPoll { candidates: BookPollCandidate[]; votes: BookPollVote[]; creatorName: string; }
+  const [bookPolls, setBookPolls] = useState<BookPollWithDetails[]>([]);
+  const [bookSearchQuery, setBookSearchQuery] = useState('');
+  const [bookSearchResults, setBookSearchResults] = useState<{id:string;title:string;author:string;thumbnail:string|null;pageCount:number;description:string}[]>([]);
+  const [bookSearching, setBookSearching] = useState(false);
+  const [bookCandidates, setBookCandidates] = useState<{book_title:string;book_author:string;thumbnail:string|null;page_count:number;description:string}[]>([]);
+  const [showPastBookPolls, setShowPastBookPolls] = useState(false);
 
   useEffect(() => {
     // 앱 데이터 버전 — 변경 시 로컬 스토리지 자동 초기화
@@ -145,6 +155,8 @@ export default function SchedulePage() {
 
         // 투표(polls) 로드
         await loadPolls(md);
+        // 책 투표 로드
+        await loadBookPolls(md);
         return;
       }
     } catch { /* fall through to local */ }
@@ -196,11 +208,15 @@ export default function SchedulePage() {
     // 로컬 모드 polls
     const lp = localStorage.getItem('polls');
     if (lp) setPolls(JSON.parse(lp));
+    // 로컬 모드 책 투표
+    const lbp = localStorage.getItem('bookPolls');
+    if (lbp) setBookPolls(JSON.parse(lbp));
   };
 
   const saveProposals = useCallback((p: ProposalWithVotes[]) => { if (useLocal) localStorage.setItem('proposals', JSON.stringify(p)); }, [useLocal]);
   const saveMeetings = useCallback((m: Meeting[]) => { if (useLocal) localStorage.setItem('meetings', JSON.stringify(m)); }, [useLocal]);
   const savePolls = useCallback((p: PollWithVotes[]) => { if (useLocal) localStorage.setItem('polls', JSON.stringify(p)); }, [useLocal]);
+  const saveBookPolls = useCallback((p: BookPollWithDetails[]) => { if (useLocal) localStorage.setItem('bookPolls', JSON.stringify(p)); }, [useLocal]);
 
   const getName = (id: string) => members.find(m => m.id === id)?.name || MEMBERS_DEFAULT.find(m => m.id === id)?.name || '?';
   const isLeader = user?.role === 'leader';
@@ -531,6 +547,155 @@ export default function SchedulePage() {
     setConfirmAction({msg:'생년월일이 변경되었습니다.',action:()=>setConfirmAction(null)});
   };
 
+  // ===== 책 투표 =====
+  const loadBookPolls = async (membersList?: Member[]) => {
+    const mems = membersList || members;
+    try {
+      const { data: bpData } = await supabase.from('book_polls').select('*').order('created_at', { ascending: false });
+      if (bpData) {
+        const result: BookPollWithDetails[] = [];
+        for (const bp of bpData) {
+          const { data: cands } = await supabase.from('book_poll_candidates').select('*').eq('poll_id', bp.id).order('created_at');
+          const { data: votes } = await supabase.from('book_poll_votes').select('*').eq('poll_id', bp.id);
+          const creator = mems.find(m => m.id === bp.created_by);
+          result.push({ ...bp, candidates: cands || [], votes: votes || [], creatorName: creator?.name || '?' });
+        }
+        setBookPolls(result);
+      }
+    } catch { /* ignore */ }
+  };
+
+  const searchBooksForPoll = async () => {
+    if (!bookSearchQuery.trim()) return;
+    setBookSearching(true);
+    try {
+      const res = await fetch(`/api/books?q=${encodeURIComponent(bookSearchQuery)}`);
+      const data = await res.json();
+      setBookSearchResults((data.items || []).map((b: {id:string;title:string;author:string;thumbnail:string|null;pageCount:number;description:string}) => ({
+        id: b.id, title: b.title, author: b.author, thumbnail: b.thumbnail, pageCount: b.pageCount, description: b.description
+      })));
+    } catch { setBookSearchResults([]); }
+    setBookSearching(false);
+  };
+
+  const addBookCandidate = (book: {title:string;author:string;thumbnail:string|null;pageCount:number;description:string}) => {
+    if (bookCandidates.length >= 5) { setConfirmAction({msg:'후보 도서는 최대 5권까지 추가 가능합니다.',action:()=>setConfirmAction(null)}); return; }
+    if (bookCandidates.some(c => c.book_title === book.title)) { setConfirmAction({msg:'이미 추가된 도서입니다.',action:()=>setConfirmAction(null)}); return; }
+    setBookCandidates([...bookCandidates, { book_title: book.title, book_author: book.author, thumbnail: book.thumbnail, page_count: book.pageCount, description: book.description }]);
+    setBookSearchQuery('');
+    setBookSearchResults([]);
+  };
+
+  const removeBookCandidate = (idx: number) => {
+    setBookCandidates(bookCandidates.filter((_, i) => i !== idx));
+  };
+
+  const handleCreateBookPoll = async () => {
+    if (!user) return;
+    if (!form.bookPollTitle?.trim()) { setConfirmAction({msg:'투표 제목을 입력해주세요.',action:()=>setConfirmAction(null)}); return; }
+    if (bookCandidates.length < 2) { setConfirmAction({msg:'후보 도서를 2권 이상 추가해주세요.',action:()=>setConfirmAction(null)}); return; }
+    if (!form.bookPollDeadline) { setConfirmAction({msg:'마감 기한을 설정해주세요.',action:()=>setConfirmAction(null)}); return; }
+    const deadline = new Date(form.bookPollDeadline + 'T23:59:59').toISOString();
+    if (useLocal) {
+      const pollId = `bp-${Date.now()}`;
+      const cands: BookPollCandidate[] = bookCandidates.map((c, i) => ({
+        id: `bpc-${Date.now()}-${i}`, poll_id: pollId,
+        book_title: c.book_title, book_author: c.book_author, thumbnail: c.thumbnail,
+        page_count: c.page_count, description: c.description, added_by: user.id, created_at: new Date().toISOString(),
+      }));
+      const newPoll: BookPollWithDetails = {
+        id: pollId, title: form.bookPollTitle.trim(), meeting_id: form.bookPollMeetingId || null,
+        created_by: user.id, deadline, status: 'active', created_at: new Date().toISOString(),
+        candidates: cands, votes: [], creatorName: user.name,
+      };
+      const up = [newPoll, ...bookPolls]; setBookPolls(up); saveBookPolls(up);
+    } else {
+      const { data: bp } = await supabase.from('book_polls').insert({
+        title: form.bookPollTitle.trim(), meeting_id: form.bookPollMeetingId || null,
+        created_by: user.id, deadline, status: 'active',
+      }).select().single();
+      if (bp) {
+        for (const c of bookCandidates) {
+          await supabase.from('book_poll_candidates').insert({ poll_id: bp.id, ...c, added_by: user.id });
+        }
+      }
+      await loadBookPolls();
+    }
+    setForm({}); setBookCandidates([]); setBookSearchQuery(''); setBookSearchResults([]); setModal(null);
+  };
+
+  const handleBookVote = async (pollId: string, candidateId: string) => {
+    if (!user) return;
+    if (useLocal) {
+      const up = bookPolls.map(bp => {
+        if (bp.id !== pollId) return bp;
+        const existingIdx = bp.votes.findIndex(v => v.member_id === user.id);
+        const newVotes = [...bp.votes];
+        if (existingIdx >= 0) {
+          if (newVotes[existingIdx].candidate_id === candidateId) { newVotes.splice(existingIdx, 1); }
+          else { newVotes[existingIdx] = { ...newVotes[existingIdx], candidate_id: candidateId }; }
+        } else {
+          newVotes.push({ id: `bpv-${Date.now()}`, poll_id: pollId, candidate_id: candidateId, member_id: user.id, created_at: new Date().toISOString() });
+        }
+        return { ...bp, votes: newVotes };
+      });
+      setBookPolls(up); saveBookPolls(up);
+    } else {
+      const poll = bookPolls.find(bp => bp.id === pollId);
+      const existing = poll?.votes.find(v => v.member_id === user.id);
+      if (existing && existing.candidate_id === candidateId) {
+        await supabase.from('book_poll_votes').delete().eq('id', existing.id);
+      } else {
+        await supabase.from('book_poll_votes').upsert(
+          { id: existing?.id, poll_id: pollId, candidate_id: candidateId, member_id: user.id },
+          { onConflict: 'poll_id,member_id' }
+        );
+      }
+      await loadBookPolls();
+    }
+  };
+
+  const handleDeleteBookPoll = async (pollId: string) => {
+    setConfirmAction({msg:'이 책 투표를 삭제하시겠습니까?', action: async () => {
+      if (useLocal) { const up = bookPolls.filter(bp => bp.id !== pollId); setBookPolls(up); saveBookPolls(up); }
+      else { await supabase.from('book_polls').delete().eq('id', pollId); await loadBookPolls(); }
+      setConfirmAction(null);
+    }});
+  };
+
+  const handleConfirmBookPoll = async (pollId: string) => {
+    const poll = bookPolls.find(bp => bp.id === pollId);
+    if (!poll) return;
+    // 1위 후보 찾기
+    const voteCounts = poll.candidates.map(c => ({
+      candidate: c,
+      count: poll.votes.filter(v => v.candidate_id === c.id).length,
+    })).sort((a, b) => b.count - a.count);
+    const winner = voteCounts[0]?.candidate;
+    if (!winner) return;
+    setConfirmAction({msg:`"${winner.book_title}"을(를) 도서로 확정하시겠습니까?`, action: async () => {
+      if (poll.meeting_id) {
+        // 모임에 도서 자동 연결
+        if (useLocal) {
+          const um = meetings.map(m => m.id === poll.meeting_id ? { ...m, book_title: winner.book_title, book_author: winner.book_author } : m);
+          setMeetings(um); saveMeetings(um);
+        } else {
+          await supabase.from('meetings').update({ book_title: winner.book_title, book_author: winner.book_author }).eq('id', poll.meeting_id);
+        }
+      }
+      // 상태 변경
+      if (useLocal) {
+        const up = bookPolls.map(bp => bp.id === pollId ? { ...bp, status: 'confirmed' as const } : bp);
+        setBookPolls(up); saveBookPolls(up);
+      } else {
+        await supabase.from('book_polls').update({ status: 'confirmed' }).eq('id', pollId);
+        await loadBookPolls();
+        init();
+      }
+      setConfirmAction(null);
+    }});
+  };
+
   /* ===== 메인 원페이지 ===== */
   return (
     <div className="app">
@@ -587,80 +752,265 @@ export default function SchedulePage() {
         <Calendar proposedDates={proposedDates} confirmedDates={confirmedDates} onDateClick={handleCalendarDateClick} />
 
 
-        {/* 일정 투표 카드 */}
-        {polls.length > 0 && (
-          <div style={{fontSize:'18px',fontWeight:700,margin:'16px 0 8px',display:'flex',alignItems:'center',gap:'6px'}}>투표해야할 일정 <span style={{fontSize:'16px',fontWeight:600,color:'var(--accent)'}}>{polls.length}개</span></div>
-        )}
-        {polls.map(p => {
-          const uv = user ? p.votes.find(v => v.member_id === user.id)?.vote : null;
-          const yesVotes = p.votes.filter(v => v.vote === 'participate');
-          const noVotes = p.votes.filter(v => v.vote === 'not_participate');
-          const totalVoters = members.length;
-          const totalVoted = p.votes.length;
-          const yesPercent = totalVoters > 0 ? Math.round((yesVotes.length / totalVoters) * 100) : 0;
-          const noPercent = totalVoters > 0 ? Math.round((noVotes.length / totalVoters) * 100) : 0;
-          const canManage = p.created_by === user?.id || isLeader;
-          const deadlineDate = p.deadline ? new Date(p.deadline) : null;
+        {/* ===== 투표 카드 렌더 함수 ===== */}
+        {(() => {
           const now = new Date();
-          const isExpired = deadlineDate ? deadlineDate < now : false;
-          const diffMs = deadlineDate ? deadlineDate.getTime() - now.getTime() : 0;
-          const diffDays = Math.ceil(diffMs / (1000*60*60*24));
-          const diffHours = Math.ceil(diffMs / (1000*60*60));
-          return (
-            <div key={p.id} className="poll-card">
-              <div className="poll-header">
-                <div className="poll-header-left">
-                  <div className="poll-icon-wrap">{Icons.poll}</div>
-                  <div>
-                    <div className="poll-title">{p.title}</div>
-                    <div className="poll-meta">{p.creatorName} · {totalVoted}/{totalVoters}명 투표</div>
+          const activePolls = polls.filter(p => {
+            const dl = p.deadline ? new Date(p.deadline) : null;
+            return !dl || dl >= now;
+          });
+          const expiredPolls = polls.filter(p => {
+            const dl = p.deadline ? new Date(p.deadline) : null;
+            return dl && dl < now;
+          }).sort((a, b) => new Date(b.deadline!).getTime() - new Date(a.deadline!).getTime());
+
+          const renderPollCard = (p: PollWithVotes) => {
+            const uv = user ? p.votes.find(v => v.member_id === user.id)?.vote : null;
+            const yesVotes = p.votes.filter(v => v.vote === 'participate');
+            const noVotes = p.votes.filter(v => v.vote === 'not_participate');
+            const totalVoters = members.length;
+            const totalVoted = p.votes.length;
+            const yesPercent = totalVoters > 0 ? Math.round((yesVotes.length / totalVoters) * 100) : 0;
+            const noPercent = totalVoters > 0 ? Math.round((noVotes.length / totalVoters) * 100) : 0;
+            const canManage = p.created_by === user?.id || isLeader;
+            const deadlineDate = p.deadline ? new Date(p.deadline) : null;
+            const isExpired = deadlineDate ? deadlineDate < now : false;
+            const diffMs = deadlineDate ? deadlineDate.getTime() - now.getTime() : 0;
+            const diffDays = Math.ceil(diffMs / (1000*60*60*24));
+            const diffHours = Math.ceil(diffMs / (1000*60*60));
+            return (
+              <div key={p.id} className="poll-card">
+                <div className="poll-header">
+                  <div className="poll-header-left">
+                    <div className="poll-icon-wrap">{Icons.poll}</div>
+                    <div>
+                      <div className="poll-title">{p.title}</div>
+                      <div className="poll-meta">{p.creatorName} · {totalVoted}/{totalVoters}명 투표</div>
+                    </div>
                   </div>
+                  {canManage && (
+                    <div style={{display:'flex',gap:'2px'}}>
+                      {!isExpired && <button className="del-btn" title="수정" onClick={() => {
+                        setForm({
+                          editPollId: p.id, pollLocation: p.title,
+                          pollDesc: p.description?.split('\n\n📅')[0] || '',
+                          pollSchedules: [{date:'',time:'오후 3시'}],
+                        });
+                        setModal('editPoll');
+                      }}>{Icons.edit}</button>}
+                      <button className="del-btn" onClick={() => handleDeletePoll(p.id)}>✕</button>
+                    </div>
+                  )}
                 </div>
-                {canManage && (
-                  <div style={{display:'flex',gap:'2px'}}>
-                    <button className="del-btn" title="수정" onClick={() => {
-                      setForm({
-                        editPollId: p.id, pollLocation: p.title,
-                        pollDesc: p.description?.split('\n\n📅')[0] || '',
-                        pollSchedules: [{date:'',time:'오후 3시'}],
-                      });
-                      setModal('editPoll');
-                    }}>{Icons.edit}</button>
-                    <button className="del-btn" onClick={() => handleDeletePoll(p.id)}>✕</button>
+                {p.description && <div className="poll-desc">{p.description}</div>}
+                {deadlineDate && (
+                  <div className={`poll-deadline ${isExpired?'expired':''}`}>
+                    {Icons.clock}
+                    <span>{isExpired ? '투표 마감' : diffDays > 0 ? `${diffDays}일 남음` : `${diffHours}시간 남음`}</span>
+                    <span className="poll-deadline-date">{deadlineDate.toLocaleDateString('ko',{month:'long',day:'numeric'})} {deadlineDate.toLocaleTimeString('ko',{hour:'2-digit',minute:'2-digit'})}</span>
                   </div>
                 )}
+                <div className="poll-results">
+                  <div className="poll-option">
+                    <div className="poll-option-head">
+                      <span className="poll-option-label">참여</span>
+                      <span className="poll-option-count">{yesVotes.length}명 ({yesPercent}%)</span>
+                    </div>
+                    <div className="poll-bar"><div className="poll-bar-fill yes" style={{width:`${yesPercent}%`}} /></div>
+                    {yesVotes.length > 0 && (
+                      <div className="poll-voters">{yesVotes.map(v => <span key={v.id} className="poll-voter yes">{getName(v.member_id)}</span>)}</div>
+                    )}
+                  </div>
+                  <div className="poll-option">
+                    <div className="poll-option-head">
+                      <span className="poll-option-label">미참여</span>
+                      <span className="poll-option-count">{noVotes.length}명 ({noPercent}%)</span>
+                    </div>
+                    <div className="poll-bar"><div className="poll-bar-fill no" style={{width:`${noPercent}%`}} /></div>
+                    {noVotes.length > 0 && (
+                      <div className="poll-voters">{noVotes.map(v => <span key={v.id} className="poll-voter no">{getName(v.member_id)}</span>)}</div>
+                    )}
+                  </div>
+                  {(() => {
+                    const votedIds = new Set(p.votes.map(v => v.member_id));
+                    const notVoted = members.filter(m => !votedIds.has(m.id));
+                    return notVoted.length > 0 ? (
+                      <div className="poll-not-voted">
+                        <span className="poll-not-voted-label">미투표 ({notVoted.length})</span>
+                        <div className="poll-voters">{notVoted.map(m => <span key={m.id} className="poll-voter muted">{m.name}</span>)}</div>
+                      </div>
+                    ) : null;
+                  })()}
+                </div>
+                {!isExpired && (
+                  <div className="poll-actions">
+                    <button className={`poll-action-btn participate ${uv==='participate'?'active':''}`} onClick={() => handlePollVote(p.id,'participate')}>
+                      {Icons.check} 참여
+                    </button>
+                    <button className={`poll-action-btn not-participate ${uv==='not_participate'?'active':''}`} onClick={() => handlePollVote(p.id,'not_participate')}>
+                      {Icons.x} 미참여
+                    </button>
+                  </div>
+                )}
+                {isExpired && <div className="poll-closed">투표가 마감되었습니다</div>}
+                <div className="poll-comments">
+                  {p.comments.length > 0 && (
+                    <div className="poll-comments-list">
+                      {p.comments.map(c => (
+                        <div key={c.id} className="poll-comment">
+                          <span className="poll-comment-name">{getName(c.member_id)}</span>
+                          <span className="poll-comment-text">{c.content}</span>
+                          {(c.member_id === user?.id || isLeader) && (
+                            <button className="poll-comment-del" onClick={() => handleDeleteComment(c.id, p.id)}>x</button>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                  <div className="poll-comment-input">
+                    <input
+                      className="input"
+                      placeholder="의견을 남겨주세요..."
+                      value={commentInput[p.id] || ''}
+                      onChange={e => setCommentInput(prev => ({...prev, [p.id]: e.target.value}))}
+                      onKeyDown={e => e.key === 'Enter' && handleAddComment(p.id)}
+                    />
+                    <button className="poll-comment-send" onClick={() => handleAddComment(p.id)}>{Icons.chat}</button>
+                  </div>
+                </div>
               </div>
-              {p.description && <div className="poll-desc">{p.description}</div>}
-              {deadlineDate && (
-                <div className={`poll-deadline ${isExpired?'expired':''}`}>
-                  {Icons.clock}
-                  <span>{isExpired ? '투표 마감' : diffDays > 0 ? `${diffDays}일 남음` : `${diffHours}시간 남음`}</span>
-                  <span className="poll-deadline-date">{deadlineDate.toLocaleDateString('ko',{month:'long',day:'numeric'})} {deadlineDate.toLocaleTimeString('ko',{hour:'2-digit',minute:'2-digit'})}</span>
-                </div>
+            );
+          };
+
+          return (
+            <>
+              {/* 진행중인 투표 */}
+              {activePolls.length > 0 && (
+                <div style={{fontSize:'18px',fontWeight:700,margin:'16px 0 8px',display:'flex',alignItems:'center',gap:'6px'}}>진행중인 투표 <span style={{fontSize:'16px',fontWeight:600,color:'var(--accent)'}}>{activePolls.length}개</span></div>
               )}
-              <div className="poll-results">
-                <div className="poll-option">
-                  <div className="poll-option-head">
-                    <span className="poll-option-label">참여</span>
-                    <span className="poll-option-count">{yesVotes.length}명 ({yesPercent}%)</span>
+              {activePolls.map(renderPollCard)}
+
+              {/* 지난 투표 (접기/펼치기) */}
+              {expiredPolls.length > 0 && (
+                <>
+                  <button
+                    onClick={() => setShowPastPolls(!showPastPolls)}
+                    style={{
+                      width:'100%', display:'flex', alignItems:'center', justifyContent:'space-between',
+                      padding:'12px 14px', margin:'16px 0 8px', background:'var(--bg-input)',
+                      border:'1px solid var(--border)', borderRadius:'var(--r)', cursor:'pointer',
+                      fontSize:'14px', fontWeight:600, color:'var(--text-sub)', fontFamily:'inherit',
+                    }}
+                  >
+                    <span style={{display:'flex',alignItems:'center',gap:'6px'}}>
+                      📦 지난 투표 <span style={{fontSize:'13px',fontWeight:500,color:'var(--text-muted)'}}>{expiredPolls.length}개</span>
+                    </span>
+                    <span style={{fontSize:'12px',transition:'transform 0.2s',transform:showPastPolls?'rotate(90deg)':'rotate(0deg)'}}>▶</span>
+                  </button>
+                  {showPastPolls && (
+                    <div style={{opacity:0.85}}>
+                      {expiredPolls.map(renderPollCard)}
+                    </div>
+                  )}
+                </>
+              )}
+            </>
+          );
+        })()}
+
+        {/* ===== 책 투표 카드 ===== */}
+        {(() => {
+          const now = new Date();
+          const activeBookPolls = bookPolls.filter(bp => bp.status === 'active' && (!bp.deadline || new Date(bp.deadline) >= now));
+          const pastBookPolls = bookPolls.filter(bp => bp.status !== 'active' || (bp.deadline && new Date(bp.deadline) < now));
+
+          const renderBookPollCard = (bp: typeof bookPolls[0]) => {
+            const isExpired = bp.status !== 'active' || (bp.deadline ? new Date(bp.deadline) < now : false);
+            const isConfirmed = bp.status === 'confirmed';
+            const canManage = bp.created_by === user?.id || isLeader;
+            const myVote = user ? bp.votes.find(v => v.member_id === user.id) : null;
+            const totalVoters = members.length;
+            const totalVoted = bp.votes.length;
+            const deadlineDate = bp.deadline ? new Date(bp.deadline) : null;
+            const diffMs = deadlineDate ? deadlineDate.getTime() - now.getTime() : 0;
+            const diffDays = Math.ceil(diffMs / (1000*60*60*24));
+
+            const voteCounts = bp.candidates.map(c => ({
+              candidate: c,
+              count: bp.votes.filter(v => v.candidate_id === c.id).length,
+              voters: bp.votes.filter(v => v.candidate_id === c.id).map(v => getName(v.member_id)),
+            })).sort((a, b) => b.count - a.count);
+            const maxVotes = voteCounts[0]?.count || 0;
+
+            return (
+              <div key={bp.id} className="poll-card">
+                <div className="poll-header">
+                  <div className="poll-header-left">
+                    <div className="poll-icon-wrap" style={{background:'var(--green-bg,#e8f5e9)'}}>{Icons.book}</div>
+                    <div>
+                      <div className="poll-title">{bp.title}{isConfirmed && <span style={{fontSize:'11px',background:'var(--accent)',color:'white',padding:'1px 6px',borderRadius:'8px',marginLeft:'6px'}}>확정</span>}</div>
+                      <div className="poll-meta">{bp.creatorName} · {totalVoted}/{totalVoters}명 투표</div>
+                    </div>
                   </div>
-                  <div className="poll-bar"><div className="poll-bar-fill yes" style={{width:`${yesPercent}%`}} /></div>
-                  {yesVotes.length > 0 && (
-                    <div className="poll-voters">{yesVotes.map(v => <span key={v.id} className="poll-voter yes">{getName(v.member_id)}</span>)}</div>
+                  {canManage && (
+                    <div style={{display:'flex',gap:'2px'}}>
+                      <button className="del-btn" onClick={() => handleDeleteBookPoll(bp.id)}>✕</button>
+                    </div>
                   )}
                 </div>
-                <div className="poll-option">
-                  <div className="poll-option-head">
-                    <span className="poll-option-label">미참여</span>
-                    <span className="poll-option-count">{noVotes.length}명 ({noPercent}%)</span>
+
+                {deadlineDate && (
+                  <div className={`poll-deadline ${isExpired?'expired':''}`}>
+                    {Icons.clock}
+                    <span>{isExpired ? '투표 마감' : diffDays > 0 ? `${diffDays}일 남음` : '오늘 마감'}</span>
                   </div>
-                  <div className="poll-bar"><div className="poll-bar-fill no" style={{width:`${noPercent}%`}} /></div>
-                  {noVotes.length > 0 && (
-                    <div className="poll-voters">{noVotes.map(v => <span key={v.id} className="poll-voter no">{getName(v.member_id)}</span>)}</div>
-                  )}
+                )}
+
+                {/* 후보 도서 목록 */}
+                <div style={{display:'flex',flexDirection:'column',gap:'8px',margin:'10px 0'}}>
+                  {voteCounts.map(({candidate: c, count, voters}) => {
+                    const percent = totalVoters > 0 ? Math.round((count / totalVoters) * 100) : 0;
+                    const isWinner = isExpired && count === maxVotes && maxVotes > 0;
+                    const isMyVote = myVote?.candidate_id === c.id;
+                    return (
+                      <div
+                        key={c.id}
+                        onClick={() => !isExpired && handleBookVote(bp.id, c.id)}
+                        style={{
+                          display:'flex', gap:'10px', padding:'10px', borderRadius:'var(--r)',
+                          border: isMyVote ? '2px solid var(--accent)' : '1px solid var(--border)',
+                          background: isWinner ? 'var(--green-bg,#e8f5e9)' : 'var(--bg-input)',
+                          cursor: isExpired ? 'default' : 'pointer', transition:'all 0.2s',
+                        }}
+                      >
+                        {c.thumbnail && <img src={c.thumbnail} alt="" style={{width:'40px',height:'58px',objectFit:'cover',borderRadius:'4px',flexShrink:0}} />}
+                        <div style={{flex:1,minWidth:0}}>
+                          <div style={{fontSize:'13px',fontWeight:600,display:'flex',alignItems:'center',gap:'4px'}}>
+                            {!isExpired && (
+                              <span style={{width:'16px',height:'16px',borderRadius:'50%',border: isMyVote ? '5px solid var(--accent)' : '2px solid var(--border)',display:'inline-block',flexShrink:0}} />
+                            )}
+                            {isWinner && <span style={{fontSize:'14px'}}>🏆</span>}
+                            {c.book_title}
+                          </div>
+                          <div style={{fontSize:'11px',color:'var(--text-muted)'}}>{c.book_author || '저자 미상'}{c.page_count ? ` · ${c.page_count}쪽` : ''}</div>
+                          <div style={{display:'flex',alignItems:'center',gap:'6px',marginTop:'4px'}}>
+                            <div style={{flex:1,height:'4px',background:'var(--border)',borderRadius:'2px',overflow:'hidden'}}>
+                              <div style={{width:`${percent}%`,height:'100%',background: isWinner ? 'var(--green,#4caf50)' : 'var(--accent)',borderRadius:'2px',transition:'width 0.3s'}} />
+                            </div>
+                            <span style={{fontSize:'11px',color:'var(--text-muted)',whiteSpace:'nowrap'}}>{count}표 ({percent}%)</span>
+                          </div>
+                          {voters.length > 0 && (
+                            <div style={{fontSize:'11px',color:'var(--text-muted)',marginTop:'2px'}}>{voters.join(', ')}</div>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })}
                 </div>
+
+                {/* 미투표자 */}
                 {(() => {
-                  const votedIds = new Set(p.votes.map(v => v.member_id));
+                  const votedIds = new Set(bp.votes.map(v => v.member_id));
                   const notVoted = members.filter(m => !votedIds.has(m.id));
                   return notVoted.length > 0 ? (
                     <div className="poll-not-voted">
@@ -669,50 +1019,58 @@ export default function SchedulePage() {
                     </div>
                   ) : null;
                 })()}
-              </div>
-              {!isExpired && (
-                <div className="poll-actions">
-                  <button className={`poll-action-btn participate ${uv==='participate'?'active':''}`} onClick={() => handlePollVote(p.id,'participate')}>
-                    {Icons.check} 참여
+
+                {/* 모임장 확정 버튼 */}
+                {isLeader && isExpired && !isConfirmed && bp.votes.length > 0 && (
+                  <button className="btn btn-accent btn-full" style={{marginTop:'8px',fontSize:'13px'}} onClick={() => handleConfirmBookPoll(bp.id)}>
+                    🏆 1위 도서 확정하기
                   </button>
-                  <button className={`poll-action-btn not-participate ${uv==='not_participate'?'active':''}`} onClick={() => handlePollVote(p.id,'not_participate')}>
-                    {Icons.x} 미참여
-                  </button>
-                </div>
-              )}
-              {isExpired && <div className="poll-closed">투표가 마감되었습니다</div>}
-              <div className="poll-comments">
-                {p.comments.length > 0 && (
-                  <div className="poll-comments-list">
-                    {p.comments.map(c => (
-                      <div key={c.id} className="poll-comment">
-                        <span className="poll-comment-name">{getName(c.member_id)}</span>
-                        <span className="poll-comment-text">{c.content}</span>
-                        {(c.member_id === user?.id || isLeader) && (
-                          <button className="poll-comment-del" onClick={() => handleDeleteComment(c.id, p.id)}>x</button>
-                        )}
-                      </div>
-                    ))}
-                  </div>
                 )}
-                <div className="poll-comment-input">
-                  <input
-                    className="input"
-                    placeholder="의견을 남겨주세요..."
-                    value={commentInput[p.id] || ''}
-                    onChange={e => setCommentInput(prev => ({...prev, [p.id]: e.target.value}))}
-                    onKeyDown={e => e.key === 'Enter' && handleAddComment(p.id)}
-                  />
-                  <button className="poll-comment-send" onClick={() => handleAddComment(p.id)}>{Icons.chat}</button>
-                </div>
               </div>
-            </div>
+            );
+          };
+
+          return (
+            <>
+              {activeBookPolls.length > 0 && (
+                <div style={{fontSize:'18px',fontWeight:700,margin:'16px 0 8px',display:'flex',alignItems:'center',gap:'6px'}}>📚 책 투표 <span style={{fontSize:'16px',fontWeight:600,color:'var(--accent)'}}>{activeBookPolls.length}개</span></div>
+              )}
+              {activeBookPolls.map(renderBookPollCard)}
+
+              {pastBookPolls.length > 0 && (
+                <>
+                  <button
+                    onClick={() => setShowPastBookPolls(!showPastBookPolls)}
+                    style={{
+                      width:'100%', display:'flex', alignItems:'center', justifyContent:'space-between',
+                      padding:'12px 14px', margin:'8px 0', background:'var(--bg-input)',
+                      border:'1px solid var(--border)', borderRadius:'var(--r)', cursor:'pointer',
+                      fontSize:'14px', fontWeight:600, color:'var(--text-sub)', fontFamily:'inherit',
+                    }}
+                  >
+                    <span style={{display:'flex',alignItems:'center',gap:'6px'}}>📚 지난 책 투표 <span style={{fontSize:'13px',fontWeight:500,color:'var(--text-muted)'}}>{pastBookPolls.length}개</span></span>
+                    <span style={{fontSize:'12px',transition:'transform 0.2s',transform:showPastBookPolls?'rotate(90deg)':'rotate(0deg)'}}>▶</span>
+                  </button>
+                  {showPastBookPolls && (
+                    <div style={{opacity:0.85}}>
+                      {pastBookPolls.map(renderBookPollCard)}
+                    </div>
+                  )}
+                </>
+              )}
+            </>
           );
-        })}
+        })()}
 
         {/* 하단 버튼 */}
         <div style={{display:'flex',flexDirection:'column',gap:'6px',marginTop:'12px'}}>
-          <button className="btn btn-accent btn-full" style={{gap:'6px'}} onClick={() => { const t=new Date(); const d=new Date(t); d.setDate(d.getDate()+3); const fmt=(x:Date)=>x.toISOString().slice(0,10); setForm({pollDate:fmt(t),pollTime:'오후 3시',pollDeadline:fmt(d)}); setModal('poll'); }}>{Icons.poll} 일정 투표하기</button>
+          <div style={{display:'flex',gap:'6px'}}>
+            <button className="btn btn-accent" style={{flex:1,gap:'6px'}} onClick={() => { const t=new Date(); const d=new Date(t); d.setDate(d.getDate()+3); const fmt=(x:Date)=>x.toISOString().slice(0,10); setForm({pollDate:fmt(t),pollTime:'오후 3시',pollDeadline:fmt(d)}); setModal('poll'); }}>{Icons.poll} 일정 투표</button>
+            <button className="btn btn-outline" style={{flex:1,gap:'6px'}} onClick={() => { const d=new Date(); d.setDate(d.getDate()+3); setForm({bookPollDeadline:d.toISOString().slice(0,10)}); setBookCandidates([]); setBookSearchQuery(''); setBookSearchResults([]); setModal('bookPoll'); }}>{Icons.book} 책 투표</button>
+          </div>
+          {isLeader && (
+            <button className="btn btn-outline btn-full" style={{gap:'6px'}} onClick={() => { setForm({entries:[]}); setModal('register'); }}>{Icons.calendar} 모임 등록하기</button>
+          )}
         </div>
       </div>
 
@@ -870,6 +1228,73 @@ export default function SchedulePage() {
           <div className="form-group"><label className="form-label">모임 시간</label><input className="input" placeholder="오후 3시" value={form.time||''} onChange={e => setForm({...form,time:e.target.value})} /></div>
           <div className="form-group"><label className="form-label">도서명</label><input className="input" placeholder="도서명" value={form.bookTitle||''} onChange={e => setForm({...form,bookTitle:e.target.value})} /></div>
           <div className="modal-btns"><button className="btn btn-outline" style={{flex:1}} onClick={() => setModal(null)}>취소</button><button className="btn btn-accent" style={{flex:1}} onClick={handleEditMeeting}>수정</button></div>
+        </div></div>
+      )}
+      {/* 책 투표 생성 모달 */}
+      {modal === 'bookPoll' && (
+        <div className="overlay" onClick={() => setModal(null)}><div className="modal" onClick={e => e.stopPropagation()} style={{maxHeight:'85vh',overflow:'auto'}}>
+          <h2>📚 책 투표 만들기</h2>
+          <div className="form-group">
+            <label className="form-label">투표 제목</label>
+            <input className="input" placeholder="예: 5월 모임 도서 선정" value={form.bookPollTitle||''} onChange={e => setForm({...form,bookPollTitle:e.target.value})} />
+          </div>
+          <div className="form-group">
+            <label className="form-label">연결할 모임 (선택)</label>
+            <select className="input" value={form.bookPollMeetingId||''} onChange={e => setForm({...form,bookPollMeetingId:e.target.value})}>
+              <option value="">선택 안함</option>
+              {meetings.filter(m => m.status === 'confirmed').map(m => (
+                <option key={m.id} value={m.id}>{m.date ? new Date(m.date+'T00:00:00').toLocaleDateString('ko',{month:'long',day:'numeric'}) : '미정'} {m.book_title ? `(${m.book_title})` : ''}</option>
+              ))}
+            </select>
+          </div>
+          <div className="form-group">
+            <label className="form-label">마감 기한</label>
+            <input className="input" type="date" value={form.bookPollDeadline||''} onChange={e => setForm({...form,bookPollDeadline:e.target.value})} />
+          </div>
+          <div className="form-group">
+            <label className="form-label">후보 도서 추가 ({bookCandidates.length}/5)</label>
+            <div style={{display:'flex',gap:'6px'}}>
+              <input className="input" style={{flex:1}} placeholder="도서 검색..." value={bookSearchQuery} onChange={e => setBookSearchQuery(e.target.value)} onKeyDown={e => e.key === 'Enter' && searchBooksForPoll()} />
+              <button className="btn btn-outline" onClick={searchBooksForPoll} disabled={bookSearching}>{bookSearching ? '...' : '검색'}</button>
+            </div>
+            {/* 검색 결과 */}
+            {bookSearchResults.length > 0 && (
+              <div style={{maxHeight:'200px',overflow:'auto',border:'1px solid var(--border)',borderRadius:'var(--r)',marginTop:'6px'}}>
+                {bookSearchResults.map(b => (
+                  <div key={b.id} onClick={() => addBookCandidate(b)} style={{
+                    display:'flex',gap:'8px',padding:'8px 10px',cursor:'pointer',borderBottom:'1px solid var(--border)',
+                    fontSize:'12px',alignItems:'center',
+                  }}>
+                    {b.thumbnail && <img src={b.thumbnail} alt="" style={{width:'30px',height:'44px',objectFit:'cover',borderRadius:'3px',flexShrink:0}} />}
+                    <div style={{flex:1,minWidth:0}}>
+                      <div style={{fontWeight:600,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{b.title}</div>
+                      <div style={{color:'var(--text-muted)'}}>{b.author}{b.pageCount ? ` · ${b.pageCount}쪽` : ''}</div>
+                    </div>
+                    <span style={{color:'var(--accent)',fontWeight:600,flexShrink:0}}>+</span>
+                  </div>
+                ))}
+              </div>
+            )}
+            {/* 추가된 후보 */}
+            {bookCandidates.length > 0 && (
+              <div style={{display:'flex',flexDirection:'column',gap:'6px',marginTop:'8px'}}>
+                {bookCandidates.map((c, i) => (
+                  <div key={i} style={{display:'flex',gap:'8px',padding:'8px 10px',background:'var(--bg-input)',border:'1px solid var(--border)',borderRadius:'var(--r)',alignItems:'center'}}>
+                    {c.thumbnail && <img src={c.thumbnail} alt="" style={{width:'30px',height:'44px',objectFit:'cover',borderRadius:'3px',flexShrink:0}} />}
+                    <div style={{flex:1,minWidth:0,fontSize:'12px'}}>
+                      <div style={{fontWeight:600}}>{c.book_title}</div>
+                      <div style={{color:'var(--text-muted)'}}>{c.book_author}{c.page_count ? ` · ${c.page_count}쪽` : ''}</div>
+                    </div>
+                    <button className="del-btn" onClick={() => removeBookCandidate(i)}>✕</button>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+          <div className="modal-btns">
+            <button className="btn btn-outline" style={{flex:1}} onClick={() => { setModal(null); setBookCandidates([]); setBookSearchResults([]); }}>취소</button>
+            <button className="btn btn-accent" style={{flex:1}} onClick={handleCreateBookPoll}>투표 만들기</button>
+          </div>
         </div></div>
       )}
       {confirmAction && (

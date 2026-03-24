@@ -132,3 +132,33 @@ export interface MeetingAttendee {
   member_id: string;
   created_at: string;
 }
+
+export interface BookPoll {
+  id: string;
+  title: string;
+  meeting_id: string | null;
+  created_by: string;
+  deadline: string | null;
+  status: 'active' | 'closed' | 'confirmed';
+  created_at: string;
+}
+
+export interface BookPollCandidate {
+  id: string;
+  poll_id: string;
+  book_title: string;
+  book_author: string | null;
+  thumbnail: string | null;
+  page_count: number | null;
+  description: string | null;
+  added_by: string | null;
+  created_at: string;
+}
+
+export interface BookPollVote {
+  id: string;
+  poll_id: string;
+  candidate_id: string;
+  member_id: string;
+  created_at: string;
+}
