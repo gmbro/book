@@ -392,7 +392,6 @@ export default function SchedulePage() {
   const handleCreatePoll = async () => {
     if (!user) return;
     if (!form.pollTitle?.trim()) { setConfirmAction({msg:'타이틀을 입력해주세요.',action:()=>setConfirmAction(null)}); return; }
-    if (!form.pollDesc?.trim()) { setConfirmAction({msg:'투표 내용을 입력해주세요.',action:()=>setConfirmAction(null)}); return; }
     if (!form.pollDate) { setConfirmAction({msg:'일정을 입력해주세요.',action:()=>setConfirmAction(null)}); return; }
     if (!form.pollDeadline) { setConfirmAction({msg:'투표 마감 기한을 입력해주세요.',action:()=>setConfirmAction(null)}); return; }
     const validSchedules = [{date: form.pollDate, time: form.pollTime || '오후 3시'}];
@@ -425,11 +424,10 @@ export default function SchedulePage() {
 
   const handleUpdatePoll = async () => {
     if (!form.editPollId) return;
-    if (!form.pollDesc?.trim()) { setConfirmAction({msg:'투표 내용을 입력해주세요.',action:()=>setConfirmAction(null)}); return; }
+    const desc = form.pollDesc?.trim() || '';
     const schedules = (form.pollSchedules || []) as {date:string;time:string}[];
     if (schedules.length === 0 || !schedules[0].date) { setConfirmAction({msg:'일정을 1개 이상 추가해주세요.',action:()=>setConfirmAction(null)}); return; }
     const title = form.pollLocation?.trim() || '장소 미정';
-    const desc = form.pollDesc.trim();
     const lastDate = schedules[schedules.length - 1].date;
     const deadlineDate = form.pollDeadline || lastDate;
     const deadline = new Date(deadlineDate + 'T23:59:59').toISOString();
@@ -943,30 +941,7 @@ export default function SchedulePage() {
               )}
               {activePolls.map(renderPollCard)}
 
-              {/* 지난 투표 (접기/펼치기) */}
-              {expiredPolls.length > 0 && (
-                <>
-                  <button
-                    onClick={() => setShowPastPolls(!showPastPolls)}
-                    style={{
-                      width:'100%', display:'flex', alignItems:'center', justifyContent:'space-between',
-                      padding:'12px 14px', margin:'16px 0 8px', background:'var(--bg-input)',
-                      border:'1px solid var(--border)', borderRadius:'var(--r)', cursor:'pointer',
-                      fontSize:'14px', fontWeight:600, color:'var(--text-sub)', fontFamily:'inherit',
-                    }}
-                  >
-                    <span style={{display:'flex',alignItems:'center',gap:'6px'}}>
-                      📦 지난 투표 <span style={{fontSize:'13px',fontWeight:500,color:'var(--text-muted)'}}>{expiredPolls.length}개</span>
-                    </span>
-                    <span style={{fontSize:'12px',transition:'transform 0.2s',transform:showPastPolls?'rotate(90deg)':'rotate(0deg)'}}>▶</span>
-                  </button>
-                  {showPastPolls && (
-                    <div style={{opacity:0.85}}>
-                      {expiredPolls.map(renderPollCard)}
-                    </div>
-                  )}
-                </>
-              )}
+
             </>
           );
         })()}
@@ -1090,27 +1065,7 @@ export default function SchedulePage() {
               )}
               {activeBookPolls.map(renderBookPollCard)}
 
-              {pastBookPolls.length > 0 && (
-                <>
-                  <button
-                    onClick={() => setShowPastBookPolls(!showPastBookPolls)}
-                    style={{
-                      width:'100%', display:'flex', alignItems:'center', justifyContent:'space-between',
-                      padding:'12px 14px', margin:'8px 0', background:'var(--bg-input)',
-                      border:'1px solid var(--border)', borderRadius:'var(--r)', cursor:'pointer',
-                      fontSize:'14px', fontWeight:600, color:'var(--text-sub)', fontFamily:'inherit',
-                    }}
-                  >
-                    <span style={{display:'flex',alignItems:'center',gap:'6px'}}>📚 지난 책 투표 <span style={{fontSize:'13px',fontWeight:500,color:'var(--text-muted)'}}>{pastBookPolls.length}개</span></span>
-                    <span style={{fontSize:'12px',transition:'transform 0.2s',transform:showPastBookPolls?'rotate(90deg)':'rotate(0deg)'}}>▶</span>
-                  </button>
-                  {showPastBookPolls && (
-                    <div style={{opacity:0.85}}>
-                      {pastBookPolls.map(renderBookPollCard)}
-                    </div>
-                  )}
-                </>
-              )}
+
             </>
           );
         })()}
@@ -1203,10 +1158,7 @@ export default function SchedulePage() {
             <label className="form-label">타이틀</label>
             <input className="input" placeholder="예: 5월 모임 일정" value={form.pollTitle||''} onChange={e => setForm({...form,pollTitle:e.target.value})} />
           </div>
-          <div className="form-group">
-            <label className="form-label">투표 내용</label>
-            <textarea className="input" placeholder="투표에 대한 상세 설명을 적어주세요" value={form.pollDesc||''} onChange={e => setForm({...form,pollDesc:e.target.value})} />
-          </div>
+
           <div className="form-group">
             <label className="form-label">장소 (선택)</label>
             <input className="input" placeholder="예: 강남역 스타벅스" value={form.pollLocation||''} onChange={e => setForm({...form,pollLocation:e.target.value})} />

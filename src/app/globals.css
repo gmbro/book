@@ -458,9 +458,10 @@ html, body {
 .dp-trigger:focus, .dp-trigger:hover { border-color: var(--accent); }
 .dp-placeholder { color: var(--text-muted); }
 .dp-dropdown {
-  position: absolute; top: calc(100% + 4px); left: 0; z-index: 400;
+  position: relative; top: auto; left: auto; z-index: 10;
   background: var(--bg-card); border: 1px solid var(--border); border-radius: var(--r);
-  box-shadow: var(--shadow-md); padding: 12px; width: 280px; animation: fadeIn 0.15s;
+  box-shadow: none; padding: 12px; width: 100%; max-width: 320px; animation: fadeIn 0.15s;
+  margin-top: 6px;
 }
 .dp-header {
   display: flex; align-items: center; justify-content: space-between;
@@ -810,8 +811,10 @@ textarea.input { min-height: 90px; resize: vertical; }
   padding: 20px;
   width: 100%;
   max-width: 400px;
-  max-height: 80vh;
+  max-height: calc(100vh - 40px);
+  max-height: calc(100dvh - 40px);
   overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
   animation: slideUp 0.2s;
   box-shadow: var(--shadow-md);
 }
