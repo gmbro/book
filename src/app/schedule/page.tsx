@@ -719,94 +719,53 @@ export default function SchedulePage() {
           </div>
         )}
 
-        {/* ===== 주간 스트립 달력 ===== */}
-        {(() => {
-          const weekOffset = (form.weekOffset as number) || 0;
-          const today = new Date();
-          const startOfWeek = new Date(today);
-          startOfWeek.setDate(today.getDate() - today.getDay() + weekOffset * 7);
-          const weekDays = Array.from({length:7}, (_,i) => {
-            const d = new Date(startOfWeek);
-            d.setDate(startOfWeek.getDate() + i);
-            return d;
-          });
-          const fmtD = (d:Date) => `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
-          const todayStr = fmtD(today);
-          const monthLabel = (() => {
-            const months = new Set(weekDays.map(d => `${d.getFullYear()}년 ${d.getMonth()+1}월`));
-            return [...months].join(' · ');
-          })();
-          const selectedDate = (form.selectedDate as string) || todayStr;
-
-          return (
-            <div className="section" style={{padding:'12px 14px'}}>
-              <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:'10px'}}>
-                <button className="kr-cal-arrow" onClick={() => setForm({...form, weekOffset: weekOffset - 1})}>
-                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="15 18 9 12 15 6"/></svg>
-                </button>
+        {/* ===== 달력 (주/월 토글) ===== */}
+        <div className="section" style={{padding:'12px 14px'}}>
+          <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:'10px'}}>
+            <div style={{display:'flex',gap:'0',borderRadius:'8px',overflow:'hidden',border:'1px solid var(--border)'}}>
+              <button onClick={() => setForm({...form, calView:'month'})} style={{padding:'5px 14px',fontSize:'11px',fontWeight:600,border:'none',cursor:'pointer',fontFamily:'inherit',background:(form.calView||'month')==='month'?'var(--accent)':'var(--bg-input)',color:(form.calView||'month')==='month'?'#fff':'var(--text-sub)',transition:'all 0.15s'}}>월</button>
+              <button onClick={() => setForm({...form, calView:'week'})} style={{padding:'5px 14px',fontSize:'11px',fontWeight:600,border:'none',borderLeft:'1px solid var(--border)',cursor:'pointer',fontFamily:'inherit',background:(form.calView||'month')==='week'?'var(--accent)':'var(--bg-input)',color:(form.calView||'month')==='week'?'#fff':'var(--text-sub)',transition:'all 0.15s'}}>주</button>
+            </div>
+            {(form.calView||'month') === 'week' && (form.weekOffset as number||0) !== 0 && (
+              <button style={{fontSize:'10px',padding:'3px 8px',border:'1px solid var(--accent)',background:'var(--accent-soft)',color:'var(--accent)',borderRadius:'12px',cursor:'pointer',fontFamily:'inherit',fontWeight:600}} onClick={() => setForm({...form, weekOffset:0})}>오늘</button>
+            )}
+          </div>
+          {(form.calView||'month') === 'month' && (
+            <>
+              <Calendar proposedDates={proposedDates} confirmedDates={confirmedDates} onDateClick={(date) => setForm({...form, selectedDate: date})} />
+              {(() => {
+                const sel = (form.selectedDate as string) || '';
+                if (!sel) return null;
+                const dayMeetings = meetings.filter(m => m.date === sel);
+                if (dayMeetings.length === 0) return (<div style={{marginTop:'10px',padding:'10px',background:'var(--bg-input)',borderRadius:'8px',textAlign:'center',fontSize:'12px',color:'var(--text-muted)'}}>{new Date(sel+'T00:00:00').toLocaleDateString('ko',{month:'long',day:'numeric',weekday:'long'})} — 일정 없음</div>);
+                return dayMeetings.map(m => (<div key={m.id} style={{marginTop:'10px',padding:'12px',background:'var(--green-soft)',borderRadius:'10px',cursor:'pointer'}} onClick={() => router.push(`/meeting/${m.id}`)}><div style={{display:'flex',justifyContent:'space-between',alignItems:'center'}}><div style={{display:'flex',alignItems:'center',gap:'8px'}}>{Icons.calendar}<div><div style={{fontSize:'13px',fontWeight:600}}>{new Date(m.date+'T00:00:00').toLocaleDateString('ko',{month:'long',day:'numeric',weekday:'short'})}</div><div style={{fontSize:'11px',color:'var(--text-sub)'}}>{m.time||'시간 미정'} · {m.book_title||'도서 미선정'}</div></div></div><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--text-muted)" strokeWidth="2"><polyline points="9 18 15 12 9 6"/></svg></div></div>));
+              })()}
+            </>
+          )}
+          {(form.calView||'month') === 'week' && (() => {
+            const weekOffset = (form.weekOffset as number) || 0;
+            const today = new Date();
+            const startOfWeek = new Date(today);
+            startOfWeek.setDate(today.getDate() - today.getDay() + weekOffset * 7);
+            const weekDays = Array.from({length:7}, (_,i) => { const d = new Date(startOfWeek); d.setDate(startOfWeek.getDate() + i); return d; });
+            const fmtD = (d:Date) => `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+            const todayStr = fmtD(today);
+            const monthLabel = (() => { const months = new Set(weekDays.map(d => `${d.getFullYear()}년 ${d.getMonth()+1}월`)); return [...months].join(' · '); })();
+            const selectedDate = (form.selectedDate as string) || todayStr;
+            return (<>
+              <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:'8px'}}>
+                <button className="kr-cal-arrow" onClick={() => setForm({...form, weekOffset: weekOffset - 1})}><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="15 18 9 12 15 6"/></svg></button>
                 <span style={{fontSize:'13px',fontWeight:600,color:'var(--text)'}}>{monthLabel}</span>
-                <div style={{display:'flex',gap:'4px',alignItems:'center'}}>
-                  {weekOffset !== 0 && (
-                    <button style={{fontSize:'10px',padding:'3px 8px',border:'1px solid var(--accent)',background:'var(--accent-soft)',color:'var(--accent)',borderRadius:'12px',cursor:'pointer',fontFamily:'inherit',fontWeight:600}} onClick={() => setForm({...form, weekOffset:0, selectedDate:todayStr})}>오늘</button>
-                  )}
-                  <button className="kr-cal-arrow" onClick={() => setForm({...form, weekOffset: weekOffset + 1})}>
-                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="9 18 15 12 9 6"/></svg>
-                  </button>
-                </div>
+                <button className="kr-cal-arrow" onClick={() => setForm({...form, weekOffset: weekOffset + 1})}><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="9 18 15 12 9 6"/></svg></button>
               </div>
               <div style={{display:'grid',gridTemplateColumns:'repeat(7,1fr)',gap:'2px'}}>
-                {['일','월','화','수','목','금','토'].map((wd,i) => (
-                  <div key={wd} style={{textAlign:'center',fontSize:'10px',fontWeight:600,color:i===0?'var(--red)':i===6?'#3b82f6':'var(--text-muted)',paddingBottom:'4px'}}>{wd}</div>
-                ))}
-                {weekDays.map((d,i) => {
-                  const ds = fmtD(d);
-                  const isToday = ds === todayStr;
-                  const isSel = ds === selectedDate;
-                  const hasConf = confirmedDates.includes(ds);
-                  const hasProp = proposedDates.includes(ds);
-                  return (
-                    <button key={i} onClick={() => setForm({...form, selectedDate: ds})} style={{
-                      display:'flex',flexDirection:'column',alignItems:'center',gap:'2px',
-                      padding:'6px 0',border:'none',borderRadius:'10px',cursor:'pointer',fontFamily:'inherit',
-                      background: isSel ? 'var(--accent)' : isToday ? 'var(--accent-soft)' : 'transparent',
-                      transition:'all 0.15s',
-                    }}>
-                      <span style={{fontSize:'13px',fontWeight:isToday||isSel?700:500,color:isSel?'#fff':i===0?'var(--red)':i===6?'#3b82f6':'var(--text)'}}>{d.getDate()}</span>
-                      <div style={{display:'flex',gap:'2px',height:'5px'}}>
-                        {hasConf && <span style={{width:'5px',height:'5px',borderRadius:'50%',background:isSel?'#fff':'var(--green)'}} />}
-                        {hasProp && !hasConf && <span style={{width:'5px',height:'5px',borderRadius:'50%',background:isSel?'rgba(255,255,255,0.6)':'var(--accent)'}} />}
-                      </div>
-                    </button>
-                  );
-                })}
+                {['일','월','화','수','목','금','토'].map((wd,i) => (<div key={wd} style={{textAlign:'center',fontSize:'10px',fontWeight:600,color:i===0?'var(--red)':i===6?'#3b82f6':'var(--text-muted)',paddingBottom:'4px'}}>{wd}</div>))}
+                {weekDays.map((d,i) => { const ds=fmtD(d); const isToday=ds===todayStr; const isSel=ds===selectedDate; const hasConf=confirmedDates.includes(ds); const hasProp=proposedDates.includes(ds); return (<button key={i} onClick={() => setForm({...form, selectedDate: ds})} style={{display:'flex',flexDirection:'column',alignItems:'center',gap:'2px',padding:'6px 0',border:'none',borderRadius:'10px',cursor:'pointer',fontFamily:'inherit',background:isSel?'var(--accent)':isToday?'var(--accent-soft)':'transparent',transition:'all 0.15s'}}><span style={{fontSize:'13px',fontWeight:isToday||isSel?700:500,color:isSel?'#fff':i===0?'var(--red)':i===6?'#3b82f6':'var(--text)'}}>{d.getDate()}</span><div style={{display:'flex',gap:'2px',height:'5px'}}>{hasConf && <span style={{width:'5px',height:'5px',borderRadius:'50%',background:isSel?'#fff':'var(--green)'}} />}{hasProp && !hasConf && <span style={{width:'5px',height:'5px',borderRadius:'50%',background:isSel?'rgba(255,255,255,0.6)':'var(--accent)'}} />}</div></button>); })}
               </div>
-              {/* 선택된 날짜의 모임 */}
-              {(() => {
-                const sel = selectedDate;
-                const dayMeetings = meetings.filter(m => m.date === sel);
-                if (dayMeetings.length === 0) return (
-                  <div style={{marginTop:'10px',padding:'10px',background:'var(--bg-input)',borderRadius:'8px',textAlign:'center',fontSize:'12px',color:'var(--text-muted)'}}>
-                    {new Date(sel+'T00:00:00').toLocaleDateString('ko',{month:'long',day:'numeric',weekday:'long'})} — 일정 없음
-                  </div>
-                );
-                return dayMeetings.map(m => (
-                  <div key={m.id} style={{marginTop:'10px',padding:'12px',background:'var(--green-soft)',borderRadius:'10px',cursor:'pointer'}} onClick={() => router.push(`/meeting/${m.id}`)}>
-                    <div style={{display:'flex',justifyContent:'space-between',alignItems:'center'}}>
-                      <div style={{display:'flex',alignItems:'center',gap:'8px'}}>
-                        {Icons.calendar}
-                        <div>
-                          <div style={{fontSize:'13px',fontWeight:600}}>{new Date(m.date+'T00:00:00').toLocaleDateString('ko',{month:'long',day:'numeric',weekday:'short'})}</div>
-                          <div style={{fontSize:'11px',color:'var(--text-sub)'}}>{m.time||'시간 미정'} · {m.book_title||'도서 미선정'}</div>
-                        </div>
-                      </div>
-                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--text-muted)" strokeWidth="2"><polyline points="9 18 15 12 9 6"/></svg>
-                    </div>
-                  </div>
-                ));
-              })()}
-            </div>
-          );
-        })()}
+              {(() => { const sel=selectedDate; const dayMeetings=meetings.filter(m=>m.date===sel); if (dayMeetings.length===0) return (<div style={{marginTop:'10px',padding:'10px',background:'var(--bg-input)',borderRadius:'8px',textAlign:'center',fontSize:'12px',color:'var(--text-muted)'}}>{new Date(sel+'T00:00:00').toLocaleDateString('ko',{month:'long',day:'numeric',weekday:'long'})} — 일정 없음</div>); return dayMeetings.map(m => (<div key={m.id} style={{marginTop:'10px',padding:'12px',background:'var(--green-soft)',borderRadius:'10px',cursor:'pointer'}} onClick={() => router.push(`/meeting/${m.id}`)}><div style={{display:'flex',justifyContent:'space-between',alignItems:'center'}}><div style={{display:'flex',alignItems:'center',gap:'8px'}}>{Icons.calendar}<div><div style={{fontSize:'13px',fontWeight:600}}>{new Date(m.date+'T00:00:00').toLocaleDateString('ko',{month:'long',day:'numeric',weekday:'short'})}</div><div style={{fontSize:'11px',color:'var(--text-sub)'}}>{m.time||'시간 미정'} · {m.book_title||'도서 미선정'}</div></div></div><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--text-muted)" strokeWidth="2"><polyline points="9 18 15 12 9 6"/></svg></div></div>)); })()}
+            </>);
+          })()}
+        </div>
 
         {/* ===== 모임 목록 ===== */}
         {meetings.length > 0 && (

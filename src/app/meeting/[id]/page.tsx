@@ -899,7 +899,7 @@ export default function MeetingDetailPage({ params }: { params: Promise<{ id: st
                 )}
                 <div className="rec-bottom-btns">
                   <label className="rec-action-btn secondary" style={{cursor:'pointer'}}>
-                    📷 사진
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21.44 11.05l-9.19 9.19a6 6 0 01-8.49-8.49l9.19-9.19a4 4 0 015.66 5.66l-9.2 9.19a2 2 0 01-2.83-2.83l8.49-8.48"/></svg> 이미지 첨부
                     <input type="file" accept="image/*" onChange={handleImageAttach} style={{display:'none'}}/>
                   </label>
                   <button className="rec-action-btn secondary" onClick={generateAiReview} disabled={aiReviewLoading}>
