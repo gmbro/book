@@ -107,7 +107,7 @@ export default function SchedulePage() {
   const [confirmAction, setConfirmAction] = useState<{msg:string;action:()=>void}|null>(null);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [showPastPolls, setShowPastPolls] = useState(false);
-  const [activeTab, setActiveTab] = useState<'meetings'|'votes'|'calendar'>('votes');
+  const [activeTab, setActiveTab] = useState<'meetings'|'votes'|'calendar'>('calendar');
   const [expandedComments, setExpandedComments] = useState<Record<string,boolean>>({});
 
   // 책 투표
@@ -725,13 +725,13 @@ export default function SchedulePage() {
 
         {/* 탭 네비게이션 */}
         <div className="sch-tabs">
-          <button className={`sch-tab ${activeTab==='meetings'?'on':''}`} onClick={() => setActiveTab('meetings')}>
-            모임 {meetings.length > 0 && <span className="sch-tab-badge">{meetings.length}</span>}
-          </button>
+          <button className={`sch-tab ${activeTab==='calendar'?'on':''}`} onClick={() => setActiveTab('calendar')}>달력</button>
           <button className={`sch-tab ${activeTab==='votes'?'on':''}`} onClick={() => setActiveTab('votes')}>
             투표 {(() => { const now = new Date(); const ac = polls.filter(p => !p.deadline || new Date(p.deadline) >= now).length + bookPolls.filter(bp => bp.status === 'active' && (!bp.deadline || new Date(bp.deadline) >= now)).length; return ac > 0 ? <span className="sch-tab-badge">{ac}</span> : null; })()}
           </button>
-          <button className={`sch-tab ${activeTab==='calendar'?'on':''}`} onClick={() => setActiveTab('calendar')}>달력</button>
+          <button className={`sch-tab ${activeTab==='meetings'?'on':''}`} onClick={() => setActiveTab('meetings')}>
+            모임 {meetings.length > 0 && <span className="sch-tab-badge">{meetings.length}</span>}
+          </button>
         </div>
 
         {/* === 다음 모임 탭 === */}
