@@ -808,39 +808,39 @@ export default function SchedulePage() {
           );
         })()}
 
-        {/* ===== 다음 모임 카드 ===== */}
-        {meetings.length > 0 && (() => {
-          const next = meetings[0];
-          return (
-            <div className="section" style={{padding:'14px',cursor:'pointer'}} onClick={() => router.push(`/meeting/${next.id}`)}>
-              <div style={{display:'flex',alignItems:'center',gap:'8px',marginBottom:'8px'}}>
-                {Icons.calendar}
-                <span style={{fontSize:'12px',fontWeight:600,color:'var(--text-sub)',letterSpacing:'0.5px'}}>다음 모임</span>
+        {/* ===== 모임 목록 ===== */}
+        {meetings.length > 0 && (
+          <div className="section" style={{padding:'14px'}}>
+            <div style={{display:'flex',alignItems:'center',gap:'8px',marginBottom:'10px'}}>
+              {Icons.calendar}
+              <span style={{fontSize:'12px',fontWeight:600,color:'var(--text-sub)',letterSpacing:'0.5px'}}>예정된 모임</span>
+              <span style={{fontSize:'11px',background:'var(--accent)',color:'#fff',borderRadius:'10px',padding:'1px 7px'}}>{meetings.length}</span>
+            </div>
+            {meetings.map((m, idx) => (
+              <div key={m.id} style={{display:'flex',alignItems:'center',gap:'12px',padding:'10px 0',cursor:'pointer',borderTop:idx>0?'1px solid var(--border)':'none'}} onClick={() => router.push(`/meeting/${m.id}`)}>
+                <div className="meeting-badge" style={{width:'44px',height:'44px',flexShrink:0}}>
+                  <span className="mm">{m.date ? new Date(m.date+'T00:00:00').toLocaleDateString('ko',{month:'short'}) : ''}</span>
+                  <span className="dd">{m.date ? new Date(m.date+'T00:00:00').getDate() : '?'}</span>
+                </div>
+                <div style={{flex:1,minWidth:0}}>
+                  <div style={{fontSize:'14px',fontWeight:600}}>{m.date ? new Date(m.date+'T00:00:00').toLocaleDateString('ko',{month:'long',day:'numeric',weekday:'short'}) : '미정'}</div>
+                  <div style={{fontSize:'11px',color:'var(--text-sub)',marginTop:'2px',display:'flex',alignItems:'center',gap:'4px'}}>
+                    {Icons.clock} {m.time||'시간 미정'}
+                    <span style={{color:'var(--border)'}}>·</span>
+                    {Icons.book} {m.book_title||'도서 미선정'}
+                  </div>
+                </div>
                 {isLeader && (
-                  <div style={{marginLeft:'auto',display:'flex',gap:'4px'}}>
-                    <button className="btn-danger-sm" style={{fontSize:'10px',padding:'2px 8px',background:'var(--bg-input)',color:'var(--text-sub)',border:'1px solid var(--border)'}} onClick={(e) => { e.stopPropagation(); setForm({editMeetingId:next.id,date:next.date||'',time:next.time||'',bookTitle:next.book_title||''}); setModal('editMeeting'); }}>수정</button>
-                    <button className="btn-danger-sm" style={{fontSize:'10px',padding:'2px 6px'}} onClick={(e) => { e.stopPropagation(); handleDeleteMeeting(next.id); }}>삭제</button>
+                  <div style={{display:'flex',gap:'4px',flexShrink:0}}>
+                    <button className="btn-danger-sm" style={{fontSize:'10px',padding:'2px 8px',background:'var(--bg-input)',color:'var(--text-sub)',border:'1px solid var(--border)'}} onClick={(e) => { e.stopPropagation(); setForm({editMeetingId:m.id,date:m.date||'',time:m.time||'',bookTitle:m.book_title||''}); setModal('editMeeting'); }}>수정</button>
+                    <button className="btn-danger-sm" style={{fontSize:'10px',padding:'2px 6px'}} onClick={(e) => { e.stopPropagation(); handleDeleteMeeting(m.id); }}>삭제</button>
                   </div>
                 )}
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--text-muted)" strokeWidth="2"><polyline points="9 18 15 12 9 6"/></svg>
               </div>
-              <div style={{display:'flex',alignItems:'center',gap:'12px'}}>
-                <div className="meeting-badge" style={{width:'48px',height:'48px'}}>
-                  <span className="mm">{next.date ? new Date(next.date+'T00:00:00').toLocaleDateString('ko',{month:'short'}) : ''}</span>
-                  <span className="dd">{next.date ? new Date(next.date+'T00:00:00').getDate() : '?'}</span>
-                </div>
-                <div style={{flex:1}}>
-                  <div style={{fontSize:'15px',fontWeight:600}}>{next.date ? new Date(next.date+'T00:00:00').toLocaleDateString('ko',{month:'long',day:'numeric',weekday:'short'}) : '미정'}</div>
-                  <div style={{fontSize:'12px',color:'var(--text-sub)',marginTop:'2px',display:'flex',alignItems:'center',gap:'6px'}}>
-                    {Icons.clock} {next.time||'시간 미정'}
-                    <span style={{color:'var(--border)'}}>·</span>
-                    {Icons.book} {next.book_title||'도서 미선정'}
-                  </div>
-                </div>
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--text-muted)" strokeWidth="2"><polyline points="9 18 15 12 9 6"/></svg>
-              </div>
-            </div>
-          );
-        })()}
+            ))}
+          </div>
+        )}
 
         {/* ===== 진행중 투표 ===== */}
         {(() => {
