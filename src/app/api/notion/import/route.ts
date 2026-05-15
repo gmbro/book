@@ -89,10 +89,10 @@ const pageTitle = (page: { properties?: Record<string, unknown> }) => {
 
 const publicPageTitle = (page: PublicNotionBlock) => legacyRichText(page.properties?.title);
 
-const publicBlockRecordValue = (record: PublicNotionRecord | undefined) => {
-  const value = record?.value;
+const publicBlockRecordValue = (record: PublicNotionRecord | undefined): PublicNotionBlock | null => {
+  const value = record?.value as (PublicNotionBlock & { value?: PublicNotionBlock }) | undefined;
   if (!value) return null;
-  return 'value' in value ? value.value || null : value;
+  return value.value || value;
 };
 
 const textFromBlock = (block: NotionBlock) => {
