@@ -3,6 +3,7 @@
 import { useEffect, useState, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import { supabase, Member, ScheduleProposal, ScheduleVote, Meeting, Poll, PollVote, PollComment, BookPoll, BookPollCandidate, BookPollVote } from '@/lib/supabase';
+import { makeShareUrl, shareOrCopy, ShareKind } from '@/lib/share';
 import Calendar from '@/components/Calendar';
 import DatePicker from '@/components/DatePicker';
 
@@ -229,6 +230,21 @@ export default function SchedulePage() {
 
   const getName = (id: string) => members.find(m => m.id === id)?.name || MEMBERS_DEFAULT.find(m => m.id === id)?.name || '?';
   const isLeader = user?.role === 'leader';
+
+  const sharePublicLink = async (kind: ShareKind, id: string, title: string, text: string) => {
+    if (useLocal) {
+      setConfirmAction({msg:'로컬 저장 데이터는 외부 공유 링크로 열 수 없습니다. Supabase에 저장된 데이터만 공유됩니다.',action:()=>setConfirmAction(null)});
+      return;
+    }
+    try {
+      const result = await shareOrCopy({ title, text, url: makeShareUrl(kind, id) });
+      if (result === 'copied') {
+        setConfirmAction({msg:'공유 링크가 복사되었습니다.',action:()=>setConfirmAction(null)});
+      }
+    } catch {
+      setConfirmAction({msg:'공유에 실패했습니다. 다시 시도해주세요.',action:()=>setConfirmAction(null)});
+    }
+  };
 
   // ===== 투표 ==== 
   const handleVote = async (pid: string, vote: 'available' | 'unavailable') => {
@@ -808,12 +824,15 @@ export default function SchedulePage() {
                     {Icons.book} {m.book_title||m.location||'도서 미선정'}
                   </div>
                 </div>
-                {isLeader && (
-                  <div style={{display:'flex',gap:'4px',flexShrink:0}}>
+                <div style={{display:'flex',gap:'4px',flexShrink:0}}>
+                  <button className="btn-danger-sm" style={{fontSize:'10px',padding:'2px 8px',background:'var(--bg-input)',color:'var(--text-sub)',border:'1px solid var(--border)'}} onClick={(e) => { e.stopPropagation(); sharePublicLink('meeting', m.id, '1+1 독서모임 일정', `[1+1 독서모임] ${m.date || '날짜 미정'} ${m.time || ''}`); }}>공유</button>
+                  {isLeader && (
+                    <>
                     <button className="btn-danger-sm" style={{fontSize:'10px',padding:'2px 8px',background:'var(--bg-input)',color:'var(--text-sub)',border:'1px solid var(--border)'}} onClick={(e) => { e.stopPropagation(); setForm({editMeetingId:m.id,date:m.date||'',time:m.time||'',location:m.location||'',bookTitle:m.book_title||''}); setModal('editMeeting'); }}>수정</button>
                     <button className="btn-danger-sm" style={{fontSize:'10px',padding:'2px 6px'}} onClick={(e) => { e.stopPropagation(); handleDeleteMeeting(m.id); }}>삭제</button>
+                    </>
+                  )}
                   </div>
-                )}
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--text-muted)" strokeWidth="2"><polyline points="9 18 15 12 9 6"/></svg>
               </div>
             ))}
@@ -852,12 +871,15 @@ export default function SchedulePage() {
                       <div className="poll-meta">{getName(p.created_by)}</div>
                     </div>
                   </div>
-                  {canManage && !isExpired && (
-                    <div style={{display:'flex',gap:'4px'}}>
-                      <button className="del-btn" onClick={() => { setForm({editPollId:p.id,pollLocation:'',pollDesc:p.description||'',pollSchedules:[{date:'',time:'오후 3시'}],pollDeadline:p.deadline?p.deadline.slice(0,10):''}); setModal('editPoll'); }}>{Icons.settings}</button>
-                      <button className="del-btn" onClick={() => handleDeletePoll(p.id)}>✕</button>
-                    </div>
-                  )}
+                  <div style={{display:'flex',gap:'4px'}}>
+                    <button className="del-btn" title="공유" onClick={() => sharePublicLink('poll', p.id, p.title, `[1+1 독서모임] ${p.title}`)}>{Icons.share}</button>
+                    {canManage && !isExpired && (
+                      <>
+                        <button className="del-btn" onClick={() => { setForm({editPollId:p.id,pollLocation:'',pollDesc:p.description||'',pollSchedules:[{date:'',time:'오후 3시'}],pollDeadline:p.deadline?p.deadline.slice(0,10):''}); setModal('editPoll'); }}>{Icons.settings}</button>
+                        <button className="del-btn" onClick={() => handleDeletePoll(p.id)}>✕</button>
+                      </>
+                    )}
+                  </div>
                 </div>
                 {!isExpired && deadlineDate && (
                   <div className="deadline-bar" style={{padding:'0 16px'}}>
@@ -958,11 +980,10 @@ export default function SchedulePage() {
                       <div className="poll-meta">{bp.creatorName} · {totalVoted}/{totalVoters}명 투표</div>
                     </div>
                   </div>
-                  {canManage && (
-                    <div style={{display:'flex',gap:'2px'}}>
-                      <button className="del-btn" onClick={() => handleDeleteBookPoll(bp.id)}>✕</button>
-                    </div>
-                  )}
+                  <div style={{display:'flex',gap:'2px'}}>
+                    <button className="del-btn" title="공유" onClick={() => sharePublicLink('book-poll', bp.id, bp.title, `[1+1 독서모임] ${bp.title}`)}>{Icons.share}</button>
+                    {canManage && <button className="del-btn" onClick={() => handleDeleteBookPoll(bp.id)}>✕</button>}
+                  </div>
                 </div>
 
                 {deadlineDate && (

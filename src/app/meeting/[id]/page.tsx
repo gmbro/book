@@ -3,6 +3,7 @@
 import { useEffect, useState, use } from 'react';
 import { useRouter } from 'next/navigation';
 import { supabase, Member, Meeting, DiscussionItem, MeetingRecord, BookReview, ReviewLike, ReviewComment } from '@/lib/supabase';
+import { encodeDiscussionContent, makeShareUrl, normalizeExternalUrl, parseDiscussionContent, shareOrCopy } from '@/lib/share';
 
 /* SVG 아이콘 */
 const Icons = {
@@ -31,38 +32,6 @@ interface DiscussionForm {
   content: string;
   externalUrl: string;
 }
-
-const parseDiscussionContent = (content: string) => {
-  try {
-    const parsed = JSON.parse(content);
-    if (parsed?.kind === 'discussion-v1') {
-      return {
-        body: String(parsed.body || ''),
-        externalUrl: String(parsed.externalUrl || ''),
-      };
-    }
-  } catch {
-    // Plain legacy text.
-  }
-  return { body: content, externalUrl: '' };
-};
-
-const encodeDiscussionContent = (body: string, externalUrl: string) => {
-  if (!externalUrl) return body;
-  return JSON.stringify({ kind: 'discussion-v1', body, externalUrl });
-};
-
-const normalizeExternalUrl = (value: string) => {
-  const trimmed = value.trim();
-  if (!trimmed) return '';
-  try {
-    const url = new URL(trimmed.includes('://') ? trimmed : `https://${trimmed}`);
-    if (url.protocol !== 'http:' && url.protocol !== 'https:') return null;
-    return url.toString();
-  } catch {
-    return null;
-  }
-};
 
 export default function MeetingDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
@@ -410,21 +379,92 @@ export default function MeetingDetailPage({ params }: { params: Promise<{ id: st
       '',
       parsed.body.trim(),
       normalizedUrl ? `\n노션/외부 링크: ${normalizedUrl}` : '',
-      `\n모임 페이지: ${window.location.href}`,
     ].filter(Boolean).join('\n');
+    const url = discussion ? makeShareUrl('discussion', discussion.id) : makeShareUrl('meeting', id);
 
     try {
-      if (navigator.share) {
-        await navigator.share({ title: `[1+1 독서모임] ${title}`, text, url: window.location.href });
-        return;
-      }
-      await navigator.clipboard.writeText(text);
-      alert('공유할 발제문이 복사되었습니다.');
+      const result = await shareOrCopy({ title: `[1+1 독서모임] ${title}`, text, url });
+      if (result === 'copied') alert('공유 링크가 복사되었습니다.');
     } catch (error) {
       if ((error as DOMException).name !== 'AbortError') {
         alert('공유에 실패했습니다. 다시 시도해주세요.');
       }
     }
+  };
+
+  const updateDiscussionExternalUrl = async (discussion: DiscussionItem, externalUrl: string) => {
+    const parsed = parseDiscussionContent(discussion.content);
+    const nextContent = encodeDiscussionContent(parsed.body, externalUrl);
+    if (useLocal) {
+      const updated = discussions.map(d => d.id === discussion.id ? { ...d, content: nextContent } : d);
+      setDiscussions(updated);
+      localStorage.setItem(`discussions-${id}`, JSON.stringify(updated));
+    } else {
+      await supabase.from('discussion_items').update({ content: nextContent }).eq('id', discussion.id);
+      setDiscussions(prev => prev.map(d => d.id === discussion.id ? { ...d, content: nextContent } : d));
+    }
+  };
+
+  const copyNotionMarkdown = async (title: string, content: string, shareUrl: string) => {
+    const notionText = `# ${title}\n\n${content}\n\n공유 링크: ${shareUrl}`;
+    await navigator.clipboard.writeText(notionText);
+    alert('노션에 붙여넣기 좋은 형식으로 복사되었습니다.');
+  };
+
+  const exportDiscussionToNotion = async (discussion?: DiscussionItem) => {
+    const parsed = discussion
+      ? parseDiscussionContent(discussion.content)
+      : { body: discForm.content.trim(), externalUrl: discForm.externalUrl.trim() };
+    if (!parsed.body.trim()) {
+      alert('노션으로 보낼 발제문을 먼저 작성해주세요.');
+      return;
+    }
+    const title = meeting?.book_title ? `『${meeting.book_title}』 발제문` : '1+1 독서모임 발제문';
+    const shareUrl = discussion ? makeShareUrl('discussion', discussion.id) : makeShareUrl('meeting', id);
+    try {
+      const res = await fetch('/api/notion/discussion', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          title,
+          content: parsed.body,
+          meeting: meeting ? {
+            date: meeting.date,
+            time: meeting.time,
+            location: meeting.location,
+            bookTitle: meeting.book_title,
+            bookAuthor: meeting.book_author,
+          } : null,
+          shareUrl,
+          externalUrl: parsed.externalUrl,
+        }),
+      });
+      const data = await res.json();
+      if (res.ok && data.url) {
+        if (discussion) await updateDiscussionExternalUrl(discussion, data.url);
+        else setDiscForm(prev => ({ ...prev, externalUrl: data.url }));
+        window.open(data.url, '_blank', 'noopener,noreferrer');
+        return;
+      }
+      await copyNotionMarkdown(title, parsed.body, shareUrl);
+    } catch {
+      await copyNotionMarkdown(title, parsed.body, shareUrl);
+    }
+  };
+
+  const shareMeeting = async () => {
+    if (!meeting) return;
+    const title = '1+1 독서모임 일정';
+    const text = `[1+1 독서모임]\n${meeting.date || '날짜 미정'} ${meeting.time || ''}\n${meeting.location || '장소 미정'}`;
+    const result = await shareOrCopy({ title, text, url: makeShareUrl('meeting', id) });
+    if (result === 'copied') alert('모임 공유 링크가 복사되었습니다.');
+  };
+
+  const shareReview = async (review: BookReview) => {
+    const title = meeting?.book_title ? `『${meeting.book_title}』 독후감` : '독후감';
+    const text = `[1+1 독서모임] ${title}\n작성: ${getName(review.author_id)}\n\n${review.content.slice(0, 160)}${review.content.length > 160 ? '...' : ''}`;
+    const result = await shareOrCopy({ title, text, url: makeShareUrl('review', review.id) });
+    if (result === 'copied') alert('독후감 공유 링크가 복사되었습니다.');
   };
 
   // form state for edit
@@ -723,19 +763,22 @@ export default function MeetingDetailPage({ params }: { params: Promise<{ id: st
             <div className="section" style={{marginBottom:0}}>
               <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:'10px'}}>
                 <div className="section-title" style={{marginBottom:0}}>모임 안내</div>
-                {isLeader && !editingInfo && (
-                  <button className="btn btn-sm btn-outline" onClick={() => {
-                    setInfoForm({
-                      date: meeting.date || '',
-                      time: meeting.time || '',
-                      location: meeting.location || '',
-                      max_members: meeting.max_members?.toString() || '',
-                      conditions: meeting.conditions || '',
-                      notice: meeting.notice || '',
-                    });
-                    setEditingInfo(true);
-                  }}>편집</button>
-                )}
+                <div style={{display:'flex',gap:'6px'}}>
+                  <button className="btn btn-sm btn-outline" onClick={shareMeeting}>공유</button>
+                  {isLeader && !editingInfo && (
+                    <button className="btn btn-sm btn-outline" onClick={() => {
+                      setInfoForm({
+                        date: meeting.date || '',
+                        time: meeting.time || '',
+                        location: meeting.location || '',
+                        max_members: meeting.max_members?.toString() || '',
+                        conditions: meeting.conditions || '',
+                        notice: meeting.notice || '',
+                      });
+                      setEditingInfo(true);
+                    }}>편집</button>
+                  )}
+                </div>
               </div>
               {editingInfo ? (
                 <div style={{display:'flex',flexDirection:'column',gap:'8px'}}>
@@ -947,6 +990,12 @@ export default function MeetingDetailPage({ params }: { params: Promise<{ id: st
                     외부공유
                   </button>
                   <button
+                    className="rec-action-btn secondary"
+                    onClick={() => exportDiscussionToNotion()}
+                  >
+                    노션연동
+                  </button>
+                  <button
                     className="rec-action-btn primary"
                     onClick={() => { if (!discForm.content.trim()) { alert('발제문을 쓰고 저장해주세요!'); return; } addDiscussion(); }}
                   >
@@ -977,6 +1026,7 @@ export default function MeetingDetailPage({ params }: { params: Promise<{ id: st
                       )}
                       <div className="read-card-actions">
                         <button className="read-action-btn" onClick={() => shareDiscussion(d)}>공유하기</button>
+                        <button className="read-action-btn" onClick={() => exportDiscussionToNotion(d)}>노션연동</button>
                         <button className="read-action-btn" onClick={() => { setForm({editDiscId:d.id}); setDiscForm({type:d.type,content:parsed.body,externalUrl:parsed.externalUrl}); }}>수정하기</button>
                         <button className="read-action-btn delete" onClick={() => deleteDiscussion(d.id)}>삭제하기</button>
                       </div>
@@ -1098,14 +1148,15 @@ export default function MeetingDetailPage({ params }: { params: Promise<{ id: st
                             <input className="input" style={{flex:1,fontSize:'12px',padding:'7px 10px'}} placeholder="댓글을 입력하세요..." value={commentInputs[r.id] || ''} onChange={e => setCommentInputs(prev => ({...prev, [r.id]: e.target.value}))} onKeyDown={e => e.key === 'Enter' && addComment(r.id)}/>
                             <button onClick={() => addComment(r.id)} style={{background:'var(--accent)',color:'white',border:'none',borderRadius:'8px',padding:'6px 10px',cursor:'pointer',fontSize:'12px'}}>전송</button>
                           </div>
-                          {(r.author_id === currentUser?.id || isLeader) && (
-                            <div className="read-card-actions" style={{marginTop:'10px'}}>
-                              {r.author_id === currentUser?.id && (
-                                <button className="read-action-btn" onClick={() => { setReviewContent(r.content); setReviewImagePreview(r.image_url || null); setEditingReview(true); }}>수정하기</button>
-                              )}
+                          <div className="read-card-actions" style={{marginTop:'10px'}}>
+                            <button className="read-action-btn" onClick={() => shareReview(r)}>공유하기</button>
+                            {r.author_id === currentUser?.id && (
+                              <button className="read-action-btn" onClick={() => { setReviewContent(r.content); setReviewImagePreview(r.image_url || null); setEditingReview(true); }}>수정하기</button>
+                            )}
+                            {(r.author_id === currentUser?.id || isLeader) && (
                               <button className="read-action-btn delete" onClick={() => deleteReview(r.id)}>삭제하기</button>
-                            </div>
-                          )}
+                            )}
+                          </div>
                         </>
                       )}
                     </div>
