@@ -3,7 +3,7 @@
 import { useEffect, useState, use } from 'react';
 import { useRouter } from 'next/navigation';
 import { supabase, Member, Meeting, DiscussionItem, MeetingRecord, BookReview, ReviewLike, ReviewComment } from '@/lib/supabase';
-import { encodeDiscussionContent, makeShareUrl, normalizeExternalUrl, parseDiscussionContent, shareOrCopy } from '@/lib/share';
+import { encodeDiscussionContent, isNotionUrl, makeShareUrl, normalizeExternalUrl, parseDiscussionContent, shareOrCopy } from '@/lib/share';
 
 /* SVG 아이콘 */
 const Icons = {
@@ -64,6 +64,7 @@ export default function MeetingDetailPage({ params }: { params: Promise<{ id: st
   const [summaryLoading, setSummaryLoading] = useState(false);
   const [isListening, setIsListening] = useState(false);
   const [aiDiscLoading, setAiDiscLoading] = useState(false);
+  const [notionImportLoading, setNotionImportLoading] = useState(false);
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const [deletedDiscussions, setDeletedDiscussions] = useState<any[]>([]);
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -405,6 +406,63 @@ export default function MeetingDetailPage({ params }: { params: Promise<{ id: st
     }
   };
 
+  const updateDiscussionBodyFromNotion = async (discussion: DiscussionItem, body: string, externalUrl: string) => {
+    const nextContent = encodeDiscussionContent(body, externalUrl);
+    if (useLocal) {
+      const updated = discussions.map(d => d.id === discussion.id ? { ...d, content: nextContent } : d);
+      setDiscussions(updated);
+      localStorage.setItem(`discussions-${id}`, JSON.stringify(updated));
+    } else {
+      await supabase.from('discussion_items').update({ content: nextContent }).eq('id', discussion.id);
+      setDiscussions(prev => prev.map(d => d.id === discussion.id ? { ...d, content: nextContent } : d));
+    }
+  };
+
+  const importDiscussionFromNotion = async (discussion?: DiscussionItem) => {
+    const parsed = discussion
+      ? parseDiscussionContent(discussion.content)
+      : { body: discForm.content, externalUrl: discForm.externalUrl };
+    const normalizedUrl = normalizeExternalUrl(parsed.externalUrl);
+
+    if (!parsed.externalUrl.trim()) {
+      alert('가져올 노션 페이지 링크를 먼저 입력해주세요.');
+      return;
+    }
+    if (!normalizedUrl || !isNotionUrl(normalizedUrl)) {
+      alert('notion.so 또는 notion.site 페이지 링크를 입력해주세요.');
+      return;
+    }
+    if (parsed.body.trim() && !confirm('현재 발제문 내용을 노션 페이지 내용으로 덮어쓸까요?')) {
+      return;
+    }
+
+    setNotionImportLoading(true);
+    try {
+      const res = await fetch('/api/notion/import', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ url: normalizedUrl }),
+      });
+      const data = await res.json();
+      if (!res.ok || !data.content) {
+        alert(data.error || '노션 페이지를 불러오지 못했습니다.');
+        return;
+      }
+
+      const nextBody = String(data.content).trim();
+      if (discussion) {
+        await updateDiscussionBodyFromNotion(discussion, nextBody, normalizedUrl);
+      } else {
+        setDiscForm(prev => ({ ...prev, content: nextBody, externalUrl: normalizedUrl }));
+      }
+      alert('노션 페이지 내용을 발제문에 적용했습니다.');
+    } catch {
+      alert('노션 페이지를 불러오지 못했습니다.');
+    } finally {
+      setNotionImportLoading(false);
+    }
+  };
+
   const copyNotionMarkdown = async (title: string, content: string, shareUrl: string) => {
     const notionText = `# ${title}\n\n${content}\n\n공유 링크: ${shareUrl}`;
     await navigator.clipboard.writeText(notionText);
@@ -450,6 +508,14 @@ export default function MeetingDetailPage({ params }: { params: Promise<{ id: st
     } catch {
       await copyNotionMarkdown(title, parsed.body, shareUrl);
     }
+  };
+
+  const handleDraftNotionAction = () => {
+    if (discForm.externalUrl.trim() && isNotionUrl(discForm.externalUrl)) {
+      importDiscussionFromNotion();
+      return;
+    }
+    exportDiscussionToNotion();
   };
 
   const shareMeeting = async () => {
@@ -991,9 +1057,10 @@ export default function MeetingDetailPage({ params }: { params: Promise<{ id: st
                   </button>
                   <button
                     className="rec-action-btn secondary"
-                    onClick={() => exportDiscussionToNotion()}
+                    onClick={handleDraftNotionAction}
+                    disabled={notionImportLoading}
                   >
-                    노션연동
+                    {notionImportLoading ? '적용중...' : (discForm.externalUrl.trim() && isNotionUrl(discForm.externalUrl) ? '노션적용' : '노션연동')}
                   </button>
                   <button
                     className="rec-action-btn primary"
@@ -1026,6 +1093,11 @@ export default function MeetingDetailPage({ params }: { params: Promise<{ id: st
                       )}
                       <div className="read-card-actions">
                         <button className="read-action-btn" onClick={() => shareDiscussion(d)}>공유하기</button>
+                        {isNotionUrl(parsed.externalUrl) && (
+                          <button className="read-action-btn" onClick={() => importDiscussionFromNotion(d)} disabled={notionImportLoading}>
+                            {notionImportLoading ? '적용중...' : '노션적용'}
+                          </button>
+                        )}
                         <button className="read-action-btn" onClick={() => exportDiscussionToNotion(d)}>노션연동</button>
                         <button className="read-action-btn" onClick={() => { setForm({editDiscId:d.id}); setDiscForm({type:d.type,content:parsed.body,externalUrl:parsed.externalUrl}); }}>수정하기</button>
                         <button className="read-action-btn delete" onClick={() => deleteDiscussion(d.id)}>삭제하기</button>

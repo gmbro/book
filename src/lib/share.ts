@@ -37,6 +37,20 @@ export const normalizeExternalUrl = (value: string) => {
   }
 };
 
+export const isNotionUrl = (value: string) => {
+  const normalized = normalizeExternalUrl(value);
+  if (!normalized) return false;
+  try {
+    const host = new URL(normalized).hostname.toLowerCase();
+    return host === 'notion.so'
+      || host.endsWith('.notion.so')
+      || host === 'notion.site'
+      || host.endsWith('.notion.site');
+  } catch {
+    return false;
+  }
+};
+
 export const makeSharePath = (kind: ShareKind, id: string) => `/share/${kind}/${id}`;
 
 export const makeShareUrl = (kind: ShareKind, id: string, origin?: string) => {

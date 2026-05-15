@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { blockCrossSiteRequest } from '@/lib/serverSecurity';
 
-const NOTION_VERSION = process.env.NOTION_VERSION || '2026-03-11';
+const NOTION_VERSION = process.env.NOTION_VERSION || '2022-06-28';
 
 const paragraph = (content: string) => ({
   object: 'block',
