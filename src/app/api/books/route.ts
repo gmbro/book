@@ -1,7 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { blockCrossSiteRequest } from '@/lib/serverSecurity';
 
 export async function GET(req: NextRequest) {
-  const query = req.nextUrl.searchParams.get('q');
+  const crossSiteBlock = blockCrossSiteRequest(req);
+  if (crossSiteBlock) return crossSiteBlock;
+
+  const query = req.nextUrl.searchParams.get('q')?.slice(0, 200);
   if (!query) return NextResponse.json({ items: [] });
 
   try {

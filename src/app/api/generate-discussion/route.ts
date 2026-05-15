@@ -1,6 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { blockCrossSiteRequest } from '@/lib/serverSecurity';
 
 export async function POST(request: NextRequest) {
+  const crossSiteBlock = blockCrossSiteRequest(request);
+  if (crossSiteBlock) return crossSiteBlock;
+
   try {
     const { bookTitle, bookAuthor, bookDescription } = await request.json();
 

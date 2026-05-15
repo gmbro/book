@@ -1,4 +1,5 @@
-import { NextResponse } from 'next/server';
+import { NextRequest, NextResponse } from 'next/server';
+import { blockCrossSiteRequest } from '@/lib/serverSecurity';
 
 const NOTION_VERSION = process.env.NOTION_VERSION || '2026-03-11';
 
@@ -25,7 +26,10 @@ const splitParagraphs = (content: string) => {
   return lines.length > 0 ? lines : [content.trim()];
 };
 
-export async function POST(request: Request) {
+export async function POST(request: NextRequest) {
+  const crossSiteBlock = blockCrossSiteRequest(request);
+  if (crossSiteBlock) return crossSiteBlock;
+
   const notionKey = process.env.NOTION_API_KEY || process.env.NOTION_TOKEN;
   const parentPageId = process.env.NOTION_PARENT_PAGE_ID;
 

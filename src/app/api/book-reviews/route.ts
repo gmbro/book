@@ -1,7 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { blockCrossSiteRequest } from '@/lib/serverSecurity';
 
 export async function GET(req: NextRequest) {
-  const title = req.nextUrl.searchParams.get('title');
+  const crossSiteBlock = blockCrossSiteRequest(req);
+  if (crossSiteBlock) return crossSiteBlock;
+
+  const title = req.nextUrl.searchParams.get('title')?.slice(0, 200);
   if (!title) return NextResponse.json({ reviews: [] });
 
   try {

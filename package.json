@@ -6,11 +6,11 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "eslint"
+    "lint": "eslint src next.config.ts eslint.config.mjs"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.99.2",
-    "next": "16.1.7",
+    "next": "^16.2.6",
     "react": "19.2.3",
     "react-dom": "19.2.3"
   },
@@ -19,7 +19,10 @@
     "@types/react": "^19",
     "@types/react-dom": "^19",
     "eslint": "^9",
-    "eslint-config-next": "16.1.7",
+    "eslint-config-next": "^16.2.6",
     "typescript": "^5"
+  },
+  "overrides": {
+    "postcss": "8.5.10"
   }
 }

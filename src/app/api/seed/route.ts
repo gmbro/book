@@ -1,5 +1,6 @@
-import { NextResponse } from 'next/server';
+import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
+import { blockCrossSiteRequest, blockUnlessMaintenanceEnabled } from '@/lib/serverSecurity';
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL || '',
@@ -39,7 +40,12 @@ const VOTES: [number, string, string][] = [
   [2, '한태원', 'available'], [2, '우동인', 'unavailable'],
 ];
 
-export async function GET() {
+export async function GET(request: NextRequest) {
+  const maintenanceBlock = blockUnlessMaintenanceEnabled();
+  if (maintenanceBlock) return maintenanceBlock;
+  const crossSiteBlock = blockCrossSiteRequest(request);
+  if (crossSiteBlock) return crossSiteBlock;
+
   try {
     // 1. 기존 투표/제안 삭제 (순서 중요: FK 제약)
     await supabase.from('schedule_votes').delete().neq('id', '00000000-0000-0000-0000-000000000000');

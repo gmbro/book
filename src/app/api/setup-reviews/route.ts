@@ -1,7 +1,13 @@
-import { NextResponse } from 'next/server';
+import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
+import { blockCrossSiteRequest, blockUnlessMaintenanceEnabled } from '@/lib/serverSecurity';
 
-export async function POST() {
+export async function POST(request: NextRequest) {
+  const maintenanceBlock = blockUnlessMaintenanceEnabled();
+  if (maintenanceBlock) return maintenanceBlock;
+  const crossSiteBlock = blockCrossSiteRequest(request);
+  if (crossSiteBlock) return crossSiteBlock;
+
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || '';
   const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || '';
   
