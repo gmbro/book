@@ -26,6 +26,44 @@ interface BookResult {
   rating: number | null; ratingsCount: number; pageCount: number; categories: string[];
 }
 
+interface DiscussionForm {
+  type: 'topic' | 'question';
+  content: string;
+  externalUrl: string;
+}
+
+const parseDiscussionContent = (content: string) => {
+  try {
+    const parsed = JSON.parse(content);
+    if (parsed?.kind === 'discussion-v1') {
+      return {
+        body: String(parsed.body || ''),
+        externalUrl: String(parsed.externalUrl || ''),
+      };
+    }
+  } catch {
+    // Plain legacy text.
+  }
+  return { body: content, externalUrl: '' };
+};
+
+const encodeDiscussionContent = (body: string, externalUrl: string) => {
+  if (!externalUrl) return body;
+  return JSON.stringify({ kind: 'discussion-v1', body, externalUrl });
+};
+
+const normalizeExternalUrl = (value: string) => {
+  const trimmed = value.trim();
+  if (!trimmed) return '';
+  try {
+    const url = new URL(trimmed.includes('://') ? trimmed : `https://${trimmed}`);
+    if (url.protocol !== 'http:' && url.protocol !== 'https:') return null;
+    return url.toString();
+  } catch {
+    return null;
+  }
+};
+
 export default function MeetingDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
   const router = useRouter();
@@ -52,7 +90,7 @@ export default function MeetingDetailPage({ params }: { params: Promise<{ id: st
 
   // 모달
   const [modal, setModal] = useState<string | null>(null);
-  const [discForm, setDiscForm] = useState({ type: 'topic' as 'topic' | 'question', content: '' });
+  const [discForm, setDiscForm] = useState<DiscussionForm>({ type: 'topic', content: '', externalUrl: '' });
   const [recContent, setRecContent] = useState('');
   const [summaryLoading, setSummaryLoading] = useState(false);
   const [isListening, setIsListening] = useState(false);
@@ -64,7 +102,7 @@ export default function MeetingDetailPage({ params }: { params: Promise<{ id: st
 
   // 모임 상세 안내 편집
   const [editingInfo, setEditingInfo] = useState(false);
-  const [infoForm, setInfoForm] = useState({ location: '', max_members: '', conditions: '', notice: '' });
+  const [infoForm, setInfoForm] = useState({ date: '', time: '', location: '', max_members: '', conditions: '', notice: '' });
   const [attendees, setAttendees] = useState<{member_id: string}[]>([]);
 
   const generateAiDiscussion = async () => {
@@ -276,30 +314,37 @@ export default function MeetingDetailPage({ params }: { params: Promise<{ id: st
   }, [meeting, id, selectedBook]);
 
   const addDiscussion = async () => {
-    if (!currentUser || !discForm.content) return;
+    if (!currentUser || !discForm.content.trim()) return;
+    const normalizedUrl = normalizeExternalUrl(discForm.externalUrl);
+    if (discForm.externalUrl.trim() && !normalizedUrl) {
+      alert('외부 링크는 http:// 또는 https://로 열 수 있는 주소여야 합니다.');
+      return;
+    }
+    const storedContent = encodeDiscussionContent(discForm.content.trim(), normalizedUrl || '');
     if (form.editDiscId) {
       // 수정 모드
       if (useLocal) {
-        const ud = discussions.map(d => d.id === form.editDiscId ? {...d, type: discForm.type, content: discForm.content} : d);
+        const ud = discussions.map(d => d.id === form.editDiscId ? {...d, type: discForm.type, content: storedContent} : d);
         setDiscussions(ud); localStorage.setItem(`discussions-${id}`, JSON.stringify(ud));
       } else {
-        await supabase.from('discussion_items').update({ type: discForm.type, content: discForm.content }).eq('id', form.editDiscId);
+        await supabase.from('discussion_items').update({ type: discForm.type, content: storedContent }).eq('id', form.editDiscId);
         const { data } = await supabase.from('discussion_items').select('*').eq('meeting_id', id).order('created_at');
         if (data) setDiscussions(data);
       }
-      setForm({}); setDiscForm({ type: 'topic', content: '' }); setModal(null);
+      setForm({}); setDiscForm({ type: 'topic', content: '', externalUrl: '' }); setModal(null);
       return;
     }
-    const item: DiscussionItem = { id: `d-${Date.now()}`, meeting_id: id, author_id: currentUser.id, type: discForm.type, content: discForm.content, created_at: new Date().toISOString() };
+    const item: DiscussionItem = { id: `d-${Date.now()}`, meeting_id: id, author_id: currentUser.id, type: discForm.type, content: storedContent, created_at: new Date().toISOString() };
     if (useLocal) {
       const ud = [...discussions, item]; setDiscussions(ud);
       localStorage.setItem(`discussions-${id}`, JSON.stringify(ud));
     } else {
-      await supabase.from('discussion_items').insert({ meeting_id: id, author_id: currentUser.id, type: discForm.type, content: discForm.content });
+      await supabase.from('discussion_items').insert({ meeting_id: id, author_id: currentUser.id, type: discForm.type, content: storedContent });
       const { data } = await supabase.from('discussion_items').select('*').eq('meeting_id', id).order('created_at');
       if (data) setDiscussions(data);
     }
-    setDiscForm({ type: 'topic', content: '' }); setModal(null);
+    setForm({});
+    setDiscForm({ type: 'topic', content: '', externalUrl: '' }); setModal(null);
   };
 
   const deleteDiscussion = async (did: string) => {
@@ -338,6 +383,48 @@ export default function MeetingDetailPage({ params }: { params: Promise<{ id: st
       if (data) setDiscussions(data);
     }
     setDeletedDiscussions([]);
+  };
+
+  const shareDiscussion = async (discussion?: DiscussionItem) => {
+    const parsed = discussion
+      ? parseDiscussionContent(discussion.content)
+      : { body: discForm.content.trim(), externalUrl: discForm.externalUrl.trim() };
+    const normalizedUrl = normalizeExternalUrl(parsed.externalUrl);
+    if (!parsed.body.trim()) {
+      alert('공유할 발제문을 먼저 작성해주세요.');
+      return;
+    }
+    if (parsed.externalUrl && !normalizedUrl) {
+      alert('외부 링크 주소를 확인해주세요.');
+      return;
+    }
+
+    const dateText = meeting?.date
+      ? new Date(meeting.date + 'T00:00:00').toLocaleDateString('ko', { year: 'numeric', month: 'long', day: 'numeric', weekday: 'short' })
+      : '날짜 미정';
+    const title = meeting?.book_title ? `『${meeting.book_title}』 발제문` : '발제문';
+    const text = [
+      `[1+1 독서모임] ${title}`,
+      `${dateText} ${meeting?.time || ''}`.trim(),
+      meeting?.location ? `장소: ${meeting.location}` : '',
+      '',
+      parsed.body.trim(),
+      normalizedUrl ? `\n노션/외부 링크: ${normalizedUrl}` : '',
+      `\n모임 페이지: ${window.location.href}`,
+    ].filter(Boolean).join('\n');
+
+    try {
+      if (navigator.share) {
+        await navigator.share({ title: `[1+1 독서모임] ${title}`, text, url: window.location.href });
+        return;
+      }
+      await navigator.clipboard.writeText(text);
+      alert('공유할 발제문이 복사되었습니다.');
+    } catch (error) {
+      if ((error as DOMException).name !== 'AbortError') {
+        alert('공유에 실패했습니다. 다시 시도해주세요.');
+      }
+    }
   };
 
   // form state for edit
@@ -404,7 +491,10 @@ export default function MeetingDetailPage({ params }: { params: Promise<{ id: st
     if (!record?.content && discussions.length === 0) { alert('요약할 내용이 없습니다.'); return; }
     setSummaryLoading(true);
     try {
-      const content = [meeting?.book_title ? `도서: ${meeting.book_title}` : '', ...discussions.map(d => `${d.type === 'topic' ? '발제문' : '질문'}: ${d.content}`), record?.content ? `기록: ${record.content}` : ''].filter(Boolean).join('\n');
+      const content = [meeting?.book_title ? `도서: ${meeting.book_title}` : '', ...discussions.map(d => {
+        const parsed = parseDiscussionContent(d.content);
+        return `${d.type === 'topic' ? '발제문' : '질문'}: ${parsed.body}${parsed.externalUrl ? `\n외부 링크: ${parsed.externalUrl}` : ''}`;
+      }), record?.content ? `기록: ${record.content}` : ''].filter(Boolean).join('\n');
       const res = await fetch('/api/summarize', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ content }) });
       const data = await res.json();
       if (data.summary) {
@@ -636,6 +726,8 @@ export default function MeetingDetailPage({ params }: { params: Promise<{ id: st
                 {isLeader && !editingInfo && (
                   <button className="btn btn-sm btn-outline" onClick={() => {
                     setInfoForm({
+                      date: meeting.date || '',
+                      time: meeting.time || '',
                       location: meeting.location || '',
                       max_members: meeting.max_members?.toString() || '',
                       conditions: meeting.conditions || '',
@@ -647,7 +739,9 @@ export default function MeetingDetailPage({ params }: { params: Promise<{ id: st
               </div>
               {editingInfo ? (
                 <div style={{display:'flex',flexDirection:'column',gap:'8px'}}>
-                  <input className="input" placeholder="장소 (예: 스타벅스 강남역점)" value={infoForm.location} onChange={e => setInfoForm({...infoForm, location: e.target.value})}/>
+                  <input className="input" type="date" value={infoForm.date} onChange={e => setInfoForm({...infoForm, date: e.target.value})}/>
+                  <input className="input" placeholder="모임 시간 (예: 오후 3시)" value={infoForm.time} onChange={e => setInfoForm({...infoForm, time: e.target.value})}/>
+                  <textarea className="input" placeholder={'장소 (예: 마루360\n서울 강남구 역삼로 172)'} value={infoForm.location} onChange={e => setInfoForm({...infoForm, location: e.target.value})} style={{minHeight:'70px',resize:'vertical',fontFamily:'inherit'}}/>
                   <input className="input" placeholder="최대 참여인원 (예: 10)" type="number" value={infoForm.max_members} onChange={e => setInfoForm({...infoForm, max_members: e.target.value})}/>
                   <input className="input" placeholder="참여조건 (예: 독후감 필수)" value={infoForm.conditions} onChange={e => setInfoForm({...infoForm, conditions: e.target.value})}/>
                   <textarea className="input" placeholder="공지사항" value={infoForm.notice} onChange={e => setInfoForm({...infoForm, notice: e.target.value})} style={{minHeight:'60px',resize:'vertical',fontFamily:'inherit'}}/>
@@ -655,6 +749,8 @@ export default function MeetingDetailPage({ params }: { params: Promise<{ id: st
                     <button className="btn btn-sm btn-outline" onClick={() => setEditingInfo(false)}>취소</button>
                     <button className="btn btn-sm" style={{background:'var(--accent)',color:'white',border:'none'}} onClick={async () => {
                       const updates = {
+                        date: infoForm.date || null,
+                        time: infoForm.time || null,
                         location: infoForm.location || null,
                         max_members: infoForm.max_members ? parseInt(infoForm.max_members) : null,
                         conditions: infoForm.conditions || null,
@@ -687,7 +783,7 @@ export default function MeetingDetailPage({ params }: { params: Promise<{ id: st
                     <span style={{flexShrink:0,width:'16px',marginTop:'1px',color:'var(--accent)'}}>{Icons.mapPin}</span>
                     <div>
                       <span style={{fontWeight:600}}>장소</span>
-                      <div style={{color:'var(--text-sub)',marginTop:'2px'}}>{meeting.location || '미정'}</div>
+                      <div style={{color:'var(--text-sub)',marginTop:'2px',whiteSpace:'pre-line'}}>{meeting.location || '미정'}</div>
                     </div>
                   </div>
                   <div style={{display:'flex',alignItems:'flex-start',gap:'8px'}}>
@@ -819,7 +915,7 @@ export default function MeetingDetailPage({ params }: { params: Promise<{ id: st
           <div className="rec-panel">
             {!meeting.book_title ? (
               <div className="empty">먼저 도서를 선정해주세요!</div>
-            ) : (discussions.length === 0 || form.editDiscId) ? (
+            ) : (discussions.length === 0 || form.editDiscId || form.newDiscussion === '1') ? (
               <>
                 <textarea
                   className="rec-textarea"
@@ -828,6 +924,13 @@ export default function MeetingDetailPage({ params }: { params: Promise<{ id: st
                   onChange={e => setDiscForm({...discForm, content: e.target.value})}
                   style={{fontSize:'16px',lineHeight:'2'}}
                   autoFocus
+                />
+                <input
+                  className="input"
+                  placeholder="노션 페이지 또는 외부 링크 (선택)"
+                  value={discForm.externalUrl}
+                  onChange={e => setDiscForm({...discForm, externalUrl: e.target.value})}
+                  style={{marginTop:'8px'}}
                 />
                 <div className="rec-bottom-btns">
                   <button
@@ -838,13 +941,19 @@ export default function MeetingDetailPage({ params }: { params: Promise<{ id: st
                     {aiDiscLoading ? '생성중...' : 'AI발제문'}
                   </button>
                   <button
+                    className="rec-action-btn secondary"
+                    onClick={() => shareDiscussion()}
+                  >
+                    외부공유
+                  </button>
+                  <button
                     className="rec-action-btn primary"
-                    onClick={() => { if (!discForm.content.trim()) { alert('발제문을 쓰고나 저장해주세요!'); return; } addDiscussion(); }}
+                    onClick={() => { if (!discForm.content.trim()) { alert('발제문을 쓰고 저장해주세요!'); return; } addDiscussion(); }}
                   >
                     {form.editDiscId ? '수정하기' : '저장하기'}
                   </button>
-                  {form.editDiscId && (
-                    <button className="rec-action-btn danger" onClick={() => { setForm({}); setDiscForm({type:'topic',content:''}); }}>취소</button>
+                  {(form.editDiscId || form.newDiscussion === '1') && (
+                    <button className="rec-action-btn danger" onClick={() => { setForm({}); setDiscForm({type:'topic',content:'',externalUrl:''}); }}>취소</button>
                   )}
                   <button className="rec-action-btn danger" onClick={clearAllDiscussions}>모두삭제</button>
                 </div>
@@ -852,20 +961,30 @@ export default function MeetingDetailPage({ params }: { params: Promise<{ id: st
             ) : (
               /* 읽기 모드: 저장된 발제문 목록 */
               <div className="read-list">
-                {discussions.map(d => (
-                  <div key={d.id} className="read-card">
-                    <div className="read-card-header">
-                      <span className="read-card-author">{getName(d.author_id)}</span>
-                      <span className="read-card-date">{new Date(d.created_at || '').toLocaleString('ko',{month:'short',day:'numeric',hour:'2-digit',minute:'2-digit'})}</span>
+                {discussions.map(d => {
+                  const parsed = parseDiscussionContent(d.content);
+                  return (
+                    <div key={d.id} className="read-card">
+                      <div className="read-card-header">
+                        <span className="read-card-author">{getName(d.author_id)}</span>
+                        <span className="read-card-date">{new Date(d.created_at || '').toLocaleString('ko',{month:'short',day:'numeric',hour:'2-digit',minute:'2-digit'})}</span>
+                      </div>
+                      <div className="read-card-content">{parsed.body}</div>
+                      {parsed.externalUrl && (
+                        <a className="external-link-chip" href={parsed.externalUrl} target="_blank" rel="noopener noreferrer">
+                          노션/외부 링크 열기
+                        </a>
+                      )}
+                      <div className="read-card-actions">
+                        <button className="read-action-btn" onClick={() => shareDiscussion(d)}>공유하기</button>
+                        <button className="read-action-btn" onClick={() => { setForm({editDiscId:d.id}); setDiscForm({type:d.type,content:parsed.body,externalUrl:parsed.externalUrl}); }}>수정하기</button>
+                        <button className="read-action-btn delete" onClick={() => deleteDiscussion(d.id)}>삭제하기</button>
+                      </div>
                     </div>
-                    <div className="read-card-content" dangerouslySetInnerHTML={{__html: d.content.replace(/\n/g, '<br/>')}} />
-                    <div className="read-card-actions">
-                      <button className="read-action-btn" onClick={() => { setForm({editDiscId:d.id}); setDiscForm({type:'topic',content:d.content}); }}>수정하기</button>
-                      <button className="read-action-btn delete" onClick={() => deleteDiscussion(d.id)}>삭제하기</button>
-                    </div>
-                  </div>
-                ))}
+                  );
+                })}
                 <div className="rec-bottom-btns" style={{marginTop:'8px'}}>
+                  <button className="rec-action-btn secondary" onClick={() => { setForm({newDiscussion:'1'}); setDiscForm({type:'topic',content:'',externalUrl:''}); }}>+ 발제문 추가</button>
                   <button className="rec-action-btn danger" onClick={clearAllDiscussions}>모두지우기</button>
                   {deletedDiscussions.length > 0 && (
                     <button className="rec-action-btn secondary" onClick={undoDiscussions}>되돌리기</button>
@@ -1109,6 +1228,7 @@ export default function MeetingDetailPage({ params }: { params: Promise<{ id: st
             </select>
           </div>
           <div className="form-group"><label className="form-label">내용</label><textarea className="input" placeholder="내용을 입력해주세요" value={discForm.content} onChange={e => setDiscForm({...discForm, content: e.target.value})} /></div>
+          <div className="form-group"><label className="form-label">노션/외부 링크</label><input className="input" placeholder="https://notion.so/..." value={discForm.externalUrl} onChange={e => setDiscForm({...discForm, externalUrl: e.target.value})} /></div>
           <div className="modal-btns"><button className="btn btn-outline" style={{flex:1}} onClick={() => setModal(null)}>취소</button><button className="btn btn-accent" style={{flex:1}} onClick={addDiscussion}>{form.editDiscId ? '수정' : '추가'}</button></div>
         </div></div>
       )}

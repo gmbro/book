@@ -48,6 +48,12 @@ const INITIAL_PROPOSALS = [
   { title: '3안 : 5월 ~ 8월 매월 두번째 토요일 오후 3시', desc: '이 일정 모두 가능하시면 참여 가능, 하나라도 안 되면 불가능을 눌러주세요!', dates: ['2026-05-09','2026-06-13','2026-07-11','2026-08-08'], deadline: '2026-03-22' },
 ];
 
+const DEFAULT_NEXT_MEETING = {
+  date: '2026-05-16',
+  time: '오후 3시',
+  location: '마루360\n서울 강남구 역삼로 172',
+};
+
 // 실제 투표 데이터: 이름 → member id 매핑
 const nameToId: Record<string, string> = { '오영준':'local-0','강다영':'local-1','김지원':'local-2','배성진':'local-3','이장민':'local-4','이경민':'local-5','홍다혜':'local-6','우동인':'local-7','한태원':'local-8','송의선':'local-9' };
 function mkVote(pid: string, name: string, vote: 'available'|'unavailable'): ScheduleVote {
@@ -261,16 +267,18 @@ export default function SchedulePage() {
     if (!user) return;
     const entries = (form.entries || []) as {date:string;time:string}[];
     if (entries.length === 0) { setConfirmAction({msg:'날짜를 1개 이상 추가해주세요.',action:()=>setConfirmAction(null)}); return; }
+    const location = (form.location as string || '').trim();
     const summary = entries.map((e:{date:string;time:string}) => `${e.date} ${e.time}`).join('\n');
-    setConfirmAction({msg:`다음 날짜로 등록하시겠습니까?\n\n${summary}`, action: async () => {
+    const locationSummary = location ? `\n\n장소\n${location}` : '';
+    setConfirmAction({msg:`다음 날짜로 등록하시겠습니까?\n\n${summary}${locationSummary}`, action: async () => {
       const newMeetings: Meeting[] = entries.map((e:{date:string;time:string}, i:number) => ({
-        id: `m-${Date.now()}-${i}`, date: e.date, time: e.time || '오후 3시', location: null, status: 'confirmed' as const, proposal_id: null, book_title: null, book_author: null, max_members: null, conditions: null, notice: null, created_at: ''
+        id: `m-${Date.now()}-${i}`, date: e.date, time: e.time || '오후 3시', location: location || null, status: 'confirmed' as const, proposal_id: null, book_title: null, book_author: null, max_members: null, conditions: null, notice: null, created_at: ''
       }));
       if (useLocal) {
         const um = [...meetings, ...newMeetings]; setMeetings(um); saveMeetings(um);
       } else {
         for (const m of newMeetings) {
-          await supabase.from('meetings').insert({ date: m.date, time: m.time, status: 'confirmed' });
+          await supabase.from('meetings').insert({ date: m.date, time: m.time, location: m.location, status: 'confirmed' });
         }
         init();
       }
@@ -282,9 +290,10 @@ export default function SchedulePage() {
   const handleConfirm = async () => {
     if (!form.proposal || !form.date) return;
     setConfirmAction({msg:'이번 모임은 이 일정으로 확정하시겠습니까?', action: async () => {
-      const m: Meeting = { id: `m-${Date.now()}`, date: form.date, time: form.time || '오후 3시', location: null, status: 'confirmed', proposal_id: form.proposal, book_title: null, book_author: null, max_members: null, conditions: null, notice: null, created_at: '' };
+      const location = (form.location as string || '').trim();
+      const m: Meeting = { id: `m-${Date.now()}`, date: form.date, time: form.time || '오후 3시', location: location || null, status: 'confirmed', proposal_id: form.proposal, book_title: null, book_author: null, max_members: null, conditions: null, notice: null, created_at: '' };
       if (useLocal) { const um = [...meetings, m]; setMeetings(um); saveMeetings(um); }
-      else { await supabase.from('meetings').insert({ date: form.date, time: form.time || '오후 3시', status: 'confirmed', proposal_id: form.proposal }); init(); }
+      else { await supabase.from('meetings').insert({ date: form.date, time: form.time || '오후 3시', location: location || null, status: 'confirmed', proposal_id: form.proposal }); init(); }
       setForm({}); setModal(null);
       setConfirmAction(null);
       // 자동 다음 모임 제안
@@ -514,11 +523,17 @@ export default function SchedulePage() {
   // ===== 모임 수정 =====
   const handleEditMeeting = async () => {
     if (!form.editMeetingId) return;
+    const updates = {
+      date: form.date || null,
+      time: form.time || null,
+      location: form.location || null,
+      book_title: form.bookTitle || null,
+    };
     if (useLocal) {
-      const up = meetings.map(m => m.id === form.editMeetingId ? { ...m, date: form.date || m.date, time: form.time || m.time, book_title: form.bookTitle || m.book_title } : m);
+      const up = meetings.map(m => m.id === form.editMeetingId ? { ...m, ...updates } : m);
       setMeetings(up); saveMeetings(up);
     } else {
-      await supabase.from('meetings').update({ date: form.date, time: form.time, book_title: form.bookTitle }).eq('id', form.editMeetingId);
+      await supabase.from('meetings').update(updates).eq('id', form.editMeetingId);
       const { data: mtgs } = await supabase.from('meetings').select('*').order('date');
       if (mtgs) setMeetings(mtgs);
     }
@@ -738,7 +753,7 @@ export default function SchedulePage() {
                 if (!sel) return null;
                 const dayMeetings = meetings.filter(m => m.date === sel);
                 if (dayMeetings.length === 0) return (<div style={{marginTop:'10px',padding:'10px',background:'var(--bg-input)',borderRadius:'8px',textAlign:'center',fontSize:'12px',color:'var(--text-muted)'}}>{new Date(sel+'T00:00:00').toLocaleDateString('ko',{month:'long',day:'numeric',weekday:'long'})} — 일정 없음</div>);
-                return dayMeetings.map(m => (<div key={m.id} style={{marginTop:'10px',padding:'12px',background:'var(--green-soft)',borderRadius:'10px',cursor:'pointer'}} onClick={() => router.push(`/meeting/${m.id}`)}><div style={{display:'flex',justifyContent:'space-between',alignItems:'center'}}><div style={{display:'flex',alignItems:'center',gap:'8px'}}>{Icons.calendar}<div><div style={{fontSize:'13px',fontWeight:600}}>{new Date(m.date+'T00:00:00').toLocaleDateString('ko',{month:'long',day:'numeric',weekday:'short'})}</div><div style={{fontSize:'11px',color:'var(--text-sub)'}}>{m.time||'시간 미정'} · {m.book_title||'도서 미선정'}</div></div></div><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--text-muted)" strokeWidth="2"><polyline points="9 18 15 12 9 6"/></svg></div></div>));
+                return dayMeetings.map(m => (<div key={m.id} style={{marginTop:'10px',padding:'12px',background:'var(--green-soft)',borderRadius:'10px',cursor:'pointer'}} onClick={() => router.push(`/meeting/${m.id}`)}><div style={{display:'flex',justifyContent:'space-between',alignItems:'center'}}><div style={{display:'flex',alignItems:'center',gap:'8px'}}>{Icons.calendar}<div><div style={{fontSize:'13px',fontWeight:600}}>{new Date(m.date+'T00:00:00').toLocaleDateString('ko',{month:'long',day:'numeric',weekday:'short'})}</div><div style={{fontSize:'11px',color:'var(--text-sub)'}}>{m.time||'시간 미정'} · {m.book_title||m.location||'도서 미선정'}</div></div></div><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--text-muted)" strokeWidth="2"><polyline points="9 18 15 12 9 6"/></svg></div></div>));
               })()}
             </>
           )}
@@ -762,7 +777,7 @@ export default function SchedulePage() {
                 {['일','월','화','수','목','금','토'].map((wd,i) => (<div key={wd} style={{textAlign:'center',fontSize:'10px',fontWeight:600,color:i===0?'var(--red)':i===6?'#3b82f6':'var(--text-muted)',paddingBottom:'4px'}}>{wd}</div>))}
                 {weekDays.map((d,i) => { const ds=fmtD(d); const isToday=ds===todayStr; const isSel=ds===selectedDate; const hasConf=confirmedDates.includes(ds); const hasProp=proposedDates.includes(ds); return (<button key={i} onClick={() => setForm({...form, selectedDate: ds})} style={{display:'flex',flexDirection:'column',alignItems:'center',gap:'2px',padding:'6px 0',border:'none',borderRadius:'10px',cursor:'pointer',fontFamily:'inherit',background:isSel?'var(--accent)':isToday?'var(--accent-soft)':'transparent',transition:'all 0.15s'}}><span style={{fontSize:'13px',fontWeight:isToday||isSel?700:500,color:isSel?'#fff':i===0?'var(--red)':i===6?'#3b82f6':'var(--text)'}}>{d.getDate()}</span><div style={{display:'flex',gap:'2px',height:'5px'}}>{hasConf && <span style={{width:'5px',height:'5px',borderRadius:'50%',background:isSel?'#fff':'var(--green)'}} />}{hasProp && !hasConf && <span style={{width:'5px',height:'5px',borderRadius:'50%',background:isSel?'rgba(255,255,255,0.6)':'var(--accent)'}} />}</div></button>); })}
               </div>
-              {(() => { const sel=selectedDate; const dayMeetings=meetings.filter(m=>m.date===sel); if (dayMeetings.length===0) return (<div style={{marginTop:'10px',padding:'10px',background:'var(--bg-input)',borderRadius:'8px',textAlign:'center',fontSize:'12px',color:'var(--text-muted)'}}>{new Date(sel+'T00:00:00').toLocaleDateString('ko',{month:'long',day:'numeric',weekday:'long'})} — 일정 없음</div>); return dayMeetings.map(m => (<div key={m.id} style={{marginTop:'10px',padding:'12px',background:'var(--green-soft)',borderRadius:'10px',cursor:'pointer'}} onClick={() => router.push(`/meeting/${m.id}`)}><div style={{display:'flex',justifyContent:'space-between',alignItems:'center'}}><div style={{display:'flex',alignItems:'center',gap:'8px'}}>{Icons.calendar}<div><div style={{fontSize:'13px',fontWeight:600}}>{new Date(m.date+'T00:00:00').toLocaleDateString('ko',{month:'long',day:'numeric',weekday:'short'})}</div><div style={{fontSize:'11px',color:'var(--text-sub)'}}>{m.time||'시간 미정'} · {m.book_title||'도서 미선정'}</div></div></div><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--text-muted)" strokeWidth="2"><polyline points="9 18 15 12 9 6"/></svg></div></div>)); })()}
+              {(() => { const sel=selectedDate; const dayMeetings=meetings.filter(m=>m.date===sel); if (dayMeetings.length===0) return (<div style={{marginTop:'10px',padding:'10px',background:'var(--bg-input)',borderRadius:'8px',textAlign:'center',fontSize:'12px',color:'var(--text-muted)'}}>{new Date(sel+'T00:00:00').toLocaleDateString('ko',{month:'long',day:'numeric',weekday:'long'})} — 일정 없음</div>); return dayMeetings.map(m => (<div key={m.id} style={{marginTop:'10px',padding:'12px',background:'var(--green-soft)',borderRadius:'10px',cursor:'pointer'}} onClick={() => router.push(`/meeting/${m.id}`)}><div style={{display:'flex',justifyContent:'space-between',alignItems:'center'}}><div style={{display:'flex',alignItems:'center',gap:'8px'}}>{Icons.calendar}<div><div style={{fontSize:'13px',fontWeight:600}}>{new Date(m.date+'T00:00:00').toLocaleDateString('ko',{month:'long',day:'numeric',weekday:'short'})}</div><div style={{fontSize:'11px',color:'var(--text-sub)'}}>{m.time||'시간 미정'} · {m.book_title||m.location||'도서 미선정'}</div></div></div><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--text-muted)" strokeWidth="2"><polyline points="9 18 15 12 9 6"/></svg></div></div>)); })()}
             </>);
           })()}
         </div>
@@ -786,12 +801,12 @@ export default function SchedulePage() {
                   <div style={{fontSize:'11px',color:'var(--text-sub)',marginTop:'2px',display:'flex',alignItems:'center',gap:'4px'}}>
                     {Icons.clock} {m.time||'시간 미정'}
                     <span style={{color:'var(--border)'}}>·</span>
-                    {Icons.book} {m.book_title||'도서 미선정'}
+                    {Icons.book} {m.book_title||m.location||'도서 미선정'}
                   </div>
                 </div>
                 {isLeader && (
                   <div style={{display:'flex',gap:'4px',flexShrink:0}}>
-                    <button className="btn-danger-sm" style={{fontSize:'10px',padding:'2px 8px',background:'var(--bg-input)',color:'var(--text-sub)',border:'1px solid var(--border)'}} onClick={(e) => { e.stopPropagation(); setForm({editMeetingId:m.id,date:m.date||'',time:m.time||'',bookTitle:m.book_title||''}); setModal('editMeeting'); }}>수정</button>
+                    <button className="btn-danger-sm" style={{fontSize:'10px',padding:'2px 8px',background:'var(--bg-input)',color:'var(--text-sub)',border:'1px solid var(--border)'}} onClick={(e) => { e.stopPropagation(); setForm({editMeetingId:m.id,date:m.date||'',time:m.time||'',location:m.location||'',bookTitle:m.book_title||''}); setModal('editMeeting'); }}>수정</button>
                     <button className="btn-danger-sm" style={{fontSize:'10px',padding:'2px 6px'}} onClick={(e) => { e.stopPropagation(); handleDeleteMeeting(m.id); }}>삭제</button>
                   </div>
                 )}
@@ -1034,7 +1049,7 @@ export default function SchedulePage() {
           <button className="btn btn-accent" style={{flex:1,gap:'4px',fontSize:'12px',padding:'9px 6px'}} onClick={() => { const t=new Date(); const d=new Date(t); d.setDate(d.getDate()+3); const fmt=(x:Date)=>x.toISOString().slice(0,10); setForm({pollDate:fmt(t),pollTime:'오후 3시',pollDeadline:fmt(d)}); setModal('poll'); }}>{Icons.poll} 일정 투표</button>
           <button className="btn btn-outline" style={{flex:1,gap:'4px',fontSize:'12px',padding:'9px 6px'}} onClick={() => { const d=new Date(); d.setDate(d.getDate()+3); setForm({bookPollDeadline:d.toISOString().slice(0,10)}); setBookCandidates([]); setBookSearchQuery(''); setBookSearchResults([]); setModal('bookPoll'); }}>{Icons.book} 책 투표</button>
           {isLeader && (
-            <button className="btn btn-outline" style={{flex:1,gap:'4px',fontSize:'12px',padding:'9px 6px'}} onClick={() => { setForm({entries:[]}); setModal('register'); }}>{Icons.calendar} 모임 등록</button>
+            <button className="btn btn-outline" style={{flex:1,gap:'4px',fontSize:'12px',padding:'9px 6px'}} onClick={() => { setForm({entries:[{date:DEFAULT_NEXT_MEETING.date,time:DEFAULT_NEXT_MEETING.time}], location: DEFAULT_NEXT_MEETING.location}); setModal('register'); }}>{Icons.calendar} 모임 등록</button>
           )}
         </div>
       </div>
@@ -1073,6 +1088,17 @@ export default function SchedulePage() {
             }}>+ 추가</button>
           </div>
 
+          <div className="form-group">
+            <label className="form-label">장소</label>
+            <textarea
+              className="input"
+              placeholder={'예: 마루360\n서울 강남구 역삼로 172'}
+              value={form.location || ''}
+              onChange={e => setForm({...form, location: e.target.value})}
+              style={{minHeight:'70px',resize:'vertical'}}
+            />
+          </div>
+
           <div className="modal-btns"><button className="btn btn-outline" style={{flex:1}} onClick={() => setModal(null)}>취소</button><button className="btn btn-accent" style={{flex:1}} onClick={handleRegisterMeeting}>확인</button></div>
         </div></div>
       )}
@@ -1086,6 +1112,7 @@ export default function SchedulePage() {
           </div>
           <div className="form-group"><label className="form-label">모임 날짜</label><DatePicker value={form.date||''} onChange={v => setForm({...form,date:v})} /></div>
           <div className="form-group"><label className="form-label">모임 시간</label><input className="input" placeholder="오후 3시" value={form.time||''} onChange={e => setForm({...form,time:e.target.value})} /></div>
+          <div className="form-group"><label className="form-label">장소</label><textarea className="input" placeholder={'마루360\n서울 강남구 역삼로 172'} value={form.location||''} onChange={e => setForm({...form,location:e.target.value})} style={{minHeight:'70px',resize:'vertical'}} /></div>
           <div className="modal-btns"><button className="btn btn-outline" style={{flex:1}} onClick={() => setModal(null)}>취소</button><button className="btn btn-green" style={{flex:1}} onClick={handleConfirm}>확정하기</button></div>
         </div></div>
       )}
@@ -1190,6 +1217,7 @@ export default function SchedulePage() {
           <h2>모임 수정</h2>
           <div className="form-group"><label className="form-label">모임 날짜</label><DatePicker value={form.date||''} onChange={v => setForm({...form,date:v})} /></div>
           <div className="form-group"><label className="form-label">모임 시간</label><input className="input" placeholder="오후 3시" value={form.time||''} onChange={e => setForm({...form,time:e.target.value})} /></div>
+          <div className="form-group"><label className="form-label">장소</label><textarea className="input" placeholder="장소" value={form.location||''} onChange={e => setForm({...form,location:e.target.value})} style={{minHeight:'70px',resize:'vertical'}} /></div>
           <div className="form-group"><label className="form-label">도서명</label><input className="input" placeholder="도서명" value={form.bookTitle||''} onChange={e => setForm({...form,bookTitle:e.target.value})} /></div>
           <div className="modal-btns"><button className="btn btn-outline" style={{flex:1}} onClick={() => setModal(null)}>취소</button><button className="btn btn-accent" style={{flex:1}} onClick={handleEditMeeting}>수정</button></div>
         </div></div>

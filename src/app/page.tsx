@@ -53,22 +53,6 @@ export default function Home() {
     return arr;
   }, [members]);
 
-  // 🌸 봄 꽃잎 애니메이션
-  const [particles, setParticles] = useState<{id:number;left:number;delay:number;dur:number;emoji:string;size:number;sway:number}[]>([]);
-  useEffect(() => {
-    const petals = ['🌸','🌸','🌸','🌸','💮','🤍','✿','❀','🌷'];
-    const items = Array.from({length:22},(_,i) => ({
-      id: i,
-      left: Math.random()*100,
-      delay: Math.random()*10,
-      dur: 6 + Math.random()*8,
-      emoji: petals[Math.floor(Math.random()*petals.length)],
-      size: 12 + Math.random()*14,
-      sway: 30 + Math.random()*60,
-    }));
-    setParticles(items);
-  }, []);
-
   const handleSelect = (m: Member) => {
     setSelectedMember(m);
     setBdayInput('');
@@ -139,20 +123,10 @@ export default function Home() {
   if (loading) return <div className="select-page"><h1>1+1 독서모임</h1><p className="desc">로딩 중...</p></div>;
 
   return (
-    <div className="select-page" style={{position:'relative',overflow:'hidden'}}>
-      {/* 🌸 봄 꽃잎 낙화 애니메이션 */}
-      {particles.map(p => (
-        <span key={p.id} className="falling-petal" style={{
-          left:`${p.left}%`,
-          fontSize:`${p.size}px`,
-          animationDuration:`${p.dur}s`,
-          animationDelay:`${p.delay}s`,
-          '--sway': `${p.sway}px`,
-        } as React.CSSProperties}>{p.emoji}</span>
-      ))}
-      <h1 style={{position:'relative',zIndex:1}}>1+1 독서모임</h1>
-      <p className="desc" style={{position:'relative',zIndex:1}}>본인 선택 후 독서 모임일정을 확인해주세요</p>
-      <div className="user-grid" style={{position:'relative',zIndex:1}}>
+    <div className="select-page">
+      <h1>1+1 독서모임</h1>
+      <p className="desc">본인 선택 후 독서 모임일정을 확인해주세요</p>
+      <div className="user-grid">
         {shuffled.map(m => (
           <button key={m.id} className={`user-btn ${m.role === 'leader' ? 'leader' : ''}`} style={{width:'100%'}} onClick={() => handleSelect(m)}>
             {m.name}

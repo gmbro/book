@@ -633,19 +633,34 @@ html, body {
 
 /* ===== USER SELECT ===== */
 .select-page {
+  position: relative;
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
   min-height: 100vh;
   padding: 40px 20px;
-  background: linear-gradient(180deg, #fdf2f8, #f5f0ff, #fdf2f8);
+  overflow: hidden;
+  background:
+    linear-gradient(180deg, rgba(4, 48, 78, 0.18), rgba(255, 255, 255, 0.72) 48%, rgba(255, 252, 244, 0.9)),
+    url('/summer-sea.jpg') center top / cover no-repeat;
+}
+
+.select-page::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(180deg, rgba(255,255,255,0.1), rgba(248,251,255,0.84) 58%, rgba(255,255,255,0.96));
+  pointer-events: none;
 }
 
 .select-page h1 {
+  position: relative;
+  z-index: 1;
   font-size: 26px;
   margin-bottom: 4px;
-  color: var(--accent);
+  color: #0f5f8a;
+  text-shadow: 0 1px 12px rgba(255,255,255,0.72);
 }
 
 /* ===== HELP TOOLTIP ===== */
@@ -672,12 +687,16 @@ html, body {
 .help-wrap:hover .help-tooltip { display: block; }
 
 .select-page .desc {
+  position: relative;
+  z-index: 1;
   font-size: 13px;
-  color: var(--text-muted);
+  color: #44606f;
   margin-bottom: 28px;
 }
 
 .user-grid {
+  position: relative;
+  z-index: 1;
   display: grid;
   grid-template-columns: repeat(2, 1fr);
   gap: 8px;
@@ -687,29 +706,30 @@ html, body {
 
 .user-btn {
   padding: 12px;
-  background: var(--bg-card);
-  border: 1px solid var(--border);
+  background: rgba(255,255,255,0.9);
+  border: 1px solid rgba(138, 176, 194, 0.5);
   border-radius: var(--r-sm);
   cursor: pointer;
   font-family: inherit;
   font-size: 14px;
   transition: all 0.15s;
-  box-shadow: var(--shadow);
+  box-shadow: 0 4px 16px rgba(31, 101, 136, 0.08);
   position: relative;
+  backdrop-filter: blur(6px);
 }
 .user-btn:hover {
-  border-color: var(--accent);
-  box-shadow: var(--shadow-md);
+  border-color: #1f95c2;
+  box-shadow: 0 8px 24px rgba(31, 101, 136, 0.14);
   transform: translateY(-1px);
 }
-.user-btn.leader { border-color: var(--accent); }
+.user-btn.leader { border-color: #1f95c2; }
 .user-btn.leader::after {
   content: '모임장';
   position: absolute;
   top: -7px;
   right: 6px;
   font-size: 9px;
-  background: var(--accent);
+  background: #1f95c2;
   color: #fff;
   padding: 1px 6px;
   border-radius: 4px;
@@ -1307,6 +1327,7 @@ textarea.input { min-height: 90px; resize: vertical; }
 .rec-bottom-btns {
   display: flex;
   flex-direction: row;
+  flex-wrap: wrap;
   gap: 8px;
   margin-top: 10px;
   max-width: 400px;
@@ -1316,6 +1337,7 @@ textarea.input { min-height: 90px; resize: vertical; }
 
 .rec-action-btn {
   flex: 1;
+  min-width: 92px;
   padding: 10px 8px;
   border: none;
   border-radius: 12px;
@@ -1518,8 +1540,26 @@ textarea.input { min-height: 90px; resize: vertical; }
   white-space: pre-line;
   word-break: break-word;
 }
+
+.external-link-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  margin-top: 10px;
+  padding: 6px 10px;
+  border-radius: 10px;
+  background: rgba(31,149,194,0.1);
+  border: 1px solid rgba(31,149,194,0.24);
+  color: #0f6f98;
+  font-size: 12px;
+  font-weight: 600;
+  text-decoration: none;
+}
+.external-link-chip:hover { background: rgba(31,149,194,0.16); }
+
 .read-card-actions {
   display: flex;
+  flex-wrap: wrap;
   gap: 8px;
   margin-top: 12px;
   padding-top: 10px;
@@ -1654,43 +1694,6 @@ textarea.input { min-height: 90px; resize: vertical; }
 ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
 
 
-/* ===== 🌸 봄 꽃잎 낙화 ===== */
-.falling-petal {
-  position: absolute;
-  top: -40px;
-  opacity: 0;
-  pointer-events: none;
-  z-index: 0;
-  animation: fallingPetal linear infinite;
-  filter: drop-shadow(0 1px 2px rgba(0,0,0,0.06));
-}
-
-@keyframes fallingPetal {
-  0% {
-    transform: translateX(0) translateY(0) rotate(0deg) scale(1);
-    opacity: 0;
-  }
-  5% {
-    opacity: 0.7;
-  }
-  25% {
-    transform: translateX(calc(var(--sway) * 0.5)) translateY(25vh) rotate(90deg) scale(0.95);
-    opacity: 0.6;
-  }
-  50% {
-    transform: translateX(calc(var(--sway) * -0.3)) translateY(50vh) rotate(200deg) scale(0.9);
-    opacity: 0.5;
-  }
-  75% {
-    transform: translateX(calc(var(--sway) * 0.7)) translateY(75vh) rotate(310deg) scale(0.85);
-    opacity: 0.35;
-  }
-  100% {
-    transform: translateX(calc(var(--sway) * -0.4)) translateY(105vh) rotate(420deg) scale(0.8);
-    opacity: 0;
-  }
-}
-
 /* ===== 반응형 디자인 ===== */
 
 /* 태블릿 (768px 이상) */
@@ -1814,4 +1817,3 @@ textarea.input { min-height: 90px; resize: vertical; }
   /* 도서 상세 */
   .book-box { padding: 16px; }
 }
-
