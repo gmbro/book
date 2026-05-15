@@ -372,6 +372,10 @@ export default function SchedulePage() {
 
   const proposedDates = proposals.flatMap(p => p.dates || []);
   const confirmedDates = meetings.map(m => m.date).filter(Boolean) as string[];
+  const confirmedTimes = meetings.reduce<Record<string, string>>((acc, m) => {
+    if (m.date && m.time) acc[m.date] = m.time;
+    return acc;
+  }, {});
 
   // 미참여자 알림 (링크 공유)
   const shareReminder = (p: ProposalWithVotes) => {
@@ -747,7 +751,7 @@ export default function SchedulePage() {
           </div>
           {(form.calView||'month') === 'month' && (
             <>
-              <Calendar proposedDates={proposedDates} confirmedDates={confirmedDates} onDateClick={(date) => setForm({...form, selectedDate: date})} />
+              <Calendar proposedDates={proposedDates} confirmedDates={confirmedDates} confirmedTimes={confirmedTimes} onDateClick={(date) => setForm({...form, selectedDate: date})} />
               {(() => {
                 const sel = (form.selectedDate as string) || '';
                 if (!sel) return null;
@@ -775,7 +779,7 @@ export default function SchedulePage() {
               </div>
               <div style={{display:'grid',gridTemplateColumns:'repeat(7,1fr)',gap:'2px'}}>
                 {['일','월','화','수','목','금','토'].map((wd,i) => (<div key={wd} style={{textAlign:'center',fontSize:'10px',fontWeight:600,color:i===0?'var(--red)':i===6?'#3b82f6':'var(--text-muted)',paddingBottom:'4px'}}>{wd}</div>))}
-                {weekDays.map((d,i) => { const ds=fmtD(d); const isToday=ds===todayStr; const isSel=ds===selectedDate; const hasConf=confirmedDates.includes(ds); const hasProp=proposedDates.includes(ds); return (<button key={i} onClick={() => setForm({...form, selectedDate: ds})} style={{display:'flex',flexDirection:'column',alignItems:'center',gap:'2px',padding:'6px 0',border:'none',borderRadius:'10px',cursor:'pointer',fontFamily:'inherit',background:isSel?'var(--accent)':isToday?'var(--accent-soft)':'transparent',transition:'all 0.15s'}}><span style={{fontSize:'13px',fontWeight:isToday||isSel?700:500,color:isSel?'#fff':i===0?'var(--red)':i===6?'#3b82f6':'var(--text)'}}>{d.getDate()}</span><div style={{display:'flex',gap:'2px',height:'5px'}}>{hasConf && <span style={{width:'5px',height:'5px',borderRadius:'50%',background:isSel?'#fff':'var(--green)'}} />}{hasProp && !hasConf && <span style={{width:'5px',height:'5px',borderRadius:'50%',background:isSel?'rgba(255,255,255,0.6)':'var(--accent)'}} />}</div></button>); })}
+                {weekDays.map((d,i) => { const ds=fmtD(d); const isToday=ds===todayStr; const isSel=ds===selectedDate; const hasConf=confirmedDates.includes(ds); const hasProp=proposedDates.includes(ds); const meetingTime=confirmedTimes[ds]; return (<button key={i} onClick={() => setForm({...form, selectedDate: ds})} style={{display:'flex',flexDirection:'column',alignItems:'center',gap:'2px',minHeight:'48px',padding:'6px 2px',border:'none',borderRadius:'10px',cursor:'pointer',fontFamily:'inherit',background:isSel?'var(--accent)':isToday?'var(--accent-soft)':'transparent',transition:'all 0.15s'}}><span style={{fontSize:'13px',fontWeight:isToday||isSel?700:500,color:isSel?'#fff':i===0?'var(--red)':i===6?'#3b82f6':'var(--text)'}}>{d.getDate()}</span>{hasConf ? <span style={{fontSize:'9px',fontWeight:700,lineHeight:1.2,color:isSel?'#fff':'var(--green)',whiteSpace:'nowrap'}}>{meetingTime || '모임'}</span> : <div style={{display:'flex',gap:'2px',height:'10px',alignItems:'center'}}>{hasProp && <span style={{width:'5px',height:'5px',borderRadius:'50%',background:isSel?'rgba(255,255,255,0.6)':'var(--accent)'}} />}</div>}</button>); })}
               </div>
               {(() => { const sel=selectedDate; const dayMeetings=meetings.filter(m=>m.date===sel); if (dayMeetings.length===0) return (<div style={{marginTop:'10px',padding:'10px',background:'var(--bg-input)',borderRadius:'8px',textAlign:'center',fontSize:'12px',color:'var(--text-muted)'}}>{new Date(sel+'T00:00:00').toLocaleDateString('ko',{month:'long',day:'numeric',weekday:'long'})} — 일정 없음</div>); return dayMeetings.map(m => (<div key={m.id} style={{marginTop:'10px',padding:'12px',background:'var(--green-soft)',borderRadius:'10px',cursor:'pointer'}} onClick={() => router.push(`/meeting/${m.id}`)}><div style={{display:'flex',justifyContent:'space-between',alignItems:'center'}}><div style={{display:'flex',alignItems:'center',gap:'8px'}}>{Icons.calendar}<div><div style={{fontSize:'13px',fontWeight:600}}>{new Date(m.date+'T00:00:00').toLocaleDateString('ko',{month:'long',day:'numeric',weekday:'short'})}</div><div style={{fontSize:'11px',color:'var(--text-sub)'}}>{m.time||'시간 미정'} · {m.book_title||m.location||'도서 미선정'}</div></div></div><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--text-muted)" strokeWidth="2"><polyline points="9 18 15 12 9 6"/></svg></div></div>)); })()}
             </>);

@@ -8,10 +8,11 @@ const MONTH_NAMES = ['1월', '2월', '3월', '4월', '5월', '6월', '7월', '8�
 interface CalendarProps {
   proposedDates?: string[];
   confirmedDates?: string[];
+  confirmedTimes?: Record<string, string>;
   onDateClick?: (date: string) => void;
 }
 
-export default function Calendar({ proposedDates = [], confirmedDates = [], onDateClick }: CalendarProps) {
+export default function Calendar({ proposedDates = [], confirmedDates = [], confirmedTimes = {}, onDateClick }: CalendarProps) {
   const [cur, setCur] = useState(new Date());
   const y = cur.getFullYear(), m = cur.getMonth();
   const first = new Date(y, m, 1).getDay();
@@ -68,6 +69,7 @@ export default function Calendar({ proposedDates = [], confirmedDates = [], onDa
           const isToday = c.str === todayStr;
           const hasProp = proposedDates.includes(c.str);
           const hasConf = confirmedDates.includes(c.str);
+          const confirmedTime = confirmedTimes[c.str];
           const clickable = hasConf && onDateClick;
           const dayOfWeek = i % 7;
           const isSun = dayOfWeek === 0;
@@ -93,7 +95,7 @@ export default function Calendar({ proposedDates = [], confirmedDates = [], onDa
               {(hasProp || hasConf) && !c.other && (
                 <div className="kr-cal-indicator">
                   {hasConf ? (
-                    <span className="kr-cal-badge conf">모임</span>
+                    <span className="kr-cal-badge conf">{confirmedTime || '모임'}</span>
                   ) : (
                     <span className="kr-cal-badge prop" />
                   )}
