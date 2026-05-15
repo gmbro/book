@@ -511,8 +511,17 @@ export default function MeetingDetailPage({ params }: { params: Promise<{ id: st
   };
 
   const handleDraftNotionAction = () => {
-    if (discForm.externalUrl.trim() && isNotionUrl(discForm.externalUrl)) {
-      importDiscussionFromNotion();
+    const externalUrl = discForm.externalUrl.trim();
+    if (externalUrl) {
+      if (isNotionUrl(externalUrl)) {
+        importDiscussionFromNotion();
+        return;
+      }
+      if (!discForm.content.trim()) {
+        alert('발제문을 불러오려면 notion.so 또는 notion.site 페이지 링크를 입력해주세요.');
+        return;
+      }
+      exportDiscussionToNotion();
       return;
     }
     exportDiscussionToNotion();

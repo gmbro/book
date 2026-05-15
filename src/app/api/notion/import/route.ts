@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { notionConfigError } from '@/lib/notionConfig';
 import { blockCrossSiteRequest } from '@/lib/serverSecurity';
 import { isNotionUrl, normalizeExternalUrl } from '@/lib/share';
 
@@ -12,10 +13,32 @@ type NotionBlock = {
   has_children?: boolean;
   [key: string]: unknown;
 };
+type PublicNotionBlock = {
+  id?: string;
+  type?: string;
+  properties?: Record<string, unknown>;
+  content?: string[];
+  format?: Record<string, unknown>;
+};
+type PublicNotionRecord = {
+  value?: PublicNotionBlock | {
+    value?: PublicNotionBlock;
+  };
+};
+type PublicNotionRecordMap = {
+  recordMap?: {
+    block?: Record<string, PublicNotionRecord>;
+  };
+};
 
 const richText = (value: unknown) => {
   if (!Array.isArray(value)) return '';
   return value.map(item => String((item as NotionRichText).plain_text || '')).join('');
+};
+
+const legacyRichText = (value: unknown) => {
+  if (!Array.isArray(value)) return '';
+  return value.map(item => Array.isArray(item) ? String(item[0] || '') : String(item || '')).join('');
 };
 
 const formatPageId = (raw: string) => {
@@ -62,6 +85,14 @@ const pageTitle = (page: { properties?: Record<string, unknown> }) => {
     if (record.type === 'title') return richText(record.title);
   }
   return '';
+};
+
+const publicPageTitle = (page: PublicNotionBlock) => legacyRichText(page.properties?.title);
+
+const publicBlockRecordValue = (record: PublicNotionRecord | undefined) => {
+  const value = record?.value;
+  if (!value) return null;
+  return 'value' in value ? value.value || null : value;
 };
 
 const textFromBlock = (block: NotionBlock) => {
@@ -137,18 +168,107 @@ const childrenFor = async (blockId: string, key: string, counter: { value: numbe
   return lines;
 };
 
+const publicTextFromBlock = (block: PublicNotionBlock) => {
+  const text = legacyRichText(block.properties?.title);
+
+  switch (block.type) {
+    case 'header':
+      return text ? `# ${text}` : '';
+    case 'sub_header':
+      return text ? `## ${text}` : '';
+    case 'sub_sub_header':
+      return text ? `### ${text}` : '';
+    case 'bulleted_list':
+      return text ? `- ${text}` : '';
+    case 'numbered_list':
+      return text ? `1. ${text}` : '';
+    case 'to_do':
+      return text ? `- [${block.properties?.checked ? 'x' : ' '}] ${text}` : '';
+    case 'quote':
+      return text ? `> ${text}` : '';
+    case 'code':
+      return text ? `\`\`\`\n${text}\n\`\`\`` : '';
+    case 'divider':
+      return '---';
+    case 'image':
+    case 'table_of_contents':
+    case 'page':
+      return '';
+    default:
+      return text;
+  }
+};
+
+const publicLinesFor = (
+  blockId: string,
+  blocks: Record<string, PublicNotionRecord>,
+  counter: { value: number },
+  depth = 0
+): string[] => {
+  if (counter.value >= MAX_BLOCKS || depth > 4) return [];
+
+  const block = publicBlockRecordValue(blocks[blockId]);
+  if (!block) return [];
+
+  const lines: string[] = [];
+  let hasOwnText = false;
+  if (block.type !== 'page') {
+    counter.value += 1;
+    const ownText = publicTextFromBlock(block);
+    if (ownText) {
+      hasOwnText = true;
+      lines.push(depth > 0 ? `${'  '.repeat(depth)}${ownText}` : ownText);
+    }
+  }
+
+  for (const childId of block.content || []) {
+    if (counter.value >= MAX_BLOCKS) break;
+    lines.push(...publicLinesFor(childId, blocks, counter, block.type === 'page' || !hasOwnText ? depth : depth + 1));
+  }
+
+  return lines;
+};
+
+const publicNotionPage = async (pageId: string) => {
+  const res = await fetch('https://www.notion.so/api/v3/loadPageChunk', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      pageId,
+      limit: 100,
+      cursor: { stack: [] },
+      chunkNumber: 0,
+      verticalColumns: false,
+    }),
+  });
+  const data = await res.json() as PublicNotionRecordMap;
+
+  if (!res.ok) {
+    throw new Error('공개 Notion 페이지를 불러오지 못했습니다.');
+  }
+
+  const blocks = data.recordMap?.block || {};
+  const page = publicBlockRecordValue(blocks[pageId]);
+  if (!page) {
+    throw new Error('공개 Notion 페이지 내용을 찾지 못했습니다.');
+  }
+
+  const content = publicLinesFor(pageId, blocks, { value: 0 }).join('\n\n').trim();
+  if (!content) {
+    throw new Error('공개 Notion 페이지에서 가져올 본문을 찾지 못했습니다.');
+  }
+
+  return {
+    title: publicPageTitle(page),
+    content,
+  };
+};
+
 export async function POST(request: NextRequest) {
   const crossSiteBlock = blockCrossSiteRequest(request);
   if (crossSiteBlock) return crossSiteBlock;
 
   const notionKey = process.env.NOTION_API_KEY || process.env.NOTION_TOKEN;
-  if (!notionKey) {
-    return NextResponse.json(
-      { error: 'Notion integration is not configured.' },
-      { status: 501 }
-    );
-  }
-
   const body = await request.json();
   const url = String(body.url || '');
   const normalizedUrl = normalizeExternalUrl(url);
@@ -156,6 +276,20 @@ export async function POST(request: NextRequest) {
 
   if (!normalizedUrl || !pageId) {
     return NextResponse.json({ error: '올바른 Notion 페이지 링크를 입력해주세요.' }, { status: 400 });
+  }
+
+  if (!notionKey) {
+    try {
+      const page = await publicNotionPage(pageId);
+      return NextResponse.json({
+        ...page,
+        pageId,
+        url: normalizedUrl,
+        source: 'public',
+      });
+    } catch {
+      return notionConfigError(['NOTION_API_KEY']);
+    }
   }
 
   try {
@@ -175,11 +309,24 @@ export async function POST(request: NextRequest) {
       content,
       pageId,
       url: normalizedUrl,
+      source: 'api',
     });
   } catch (error) {
+    try {
+      const page = await publicNotionPage(pageId);
+      return NextResponse.json({
+        ...page,
+        pageId,
+        url: normalizedUrl,
+        source: 'public',
+      });
+    } catch {
+      // Keep the official API error because it is usually more actionable.
+    }
+
     const message = error instanceof Error ? error.message : 'Notion page could not be loaded.';
     return NextResponse.json(
-      { error: `${message} 노션 페이지에서 이 Integration을 초대했는지 확인해주세요.` },
+      { error: `${message} 공개 페이지로도 불러오지 못했습니다. 웹에 게시된 Notion 링크인지 확인해주세요.` },
       { status: 502 }
     );
   }

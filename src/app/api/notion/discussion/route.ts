@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { notionConfigError } from '@/lib/notionConfig';
 import { blockCrossSiteRequest } from '@/lib/serverSecurity';
 
 const NOTION_VERSION = process.env.NOTION_VERSION || '2022-06-28';
@@ -33,12 +34,12 @@ export async function POST(request: NextRequest) {
   const notionKey = process.env.NOTION_API_KEY || process.env.NOTION_TOKEN;
   const parentPageId = process.env.NOTION_PARENT_PAGE_ID;
 
-  if (!notionKey || !parentPageId) {
-    return NextResponse.json(
-      { error: 'Notion integration is not configured.' },
-      { status: 501 }
-    );
-  }
+  const missingConfig = [
+    !notionKey ? 'NOTION_API_KEY' : '',
+    !parentPageId ? 'NOTION_PARENT_PAGE_ID' : '',
+  ].filter(Boolean);
+
+  if (missingConfig.length > 0) return notionConfigError(missingConfig);
 
   const body = await request.json();
   const title = String(body.title || '1+1 독서모임 발제문').slice(0, 2000);
