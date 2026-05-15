@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { notionConfigError } from '@/lib/notionConfig';
 import { blockCrossSiteRequest } from '@/lib/serverSecurity';
-import { isNotionUrl, normalizeExternalUrl } from '@/lib/share';
+import { isNotionUrl, normalizeExternalUrl, type NotionLiteBlock, type NotionLiteText } from '@/lib/share';
 
 const NOTION_VERSION = process.env.NOTION_VERSION || '2022-06-28';
 const MAX_BLOCKS = 160;
@@ -30,15 +30,33 @@ type PublicNotionRecordMap = {
     block?: Record<string, PublicNotionRecord>;
   };
 };
+type PublicNotionAnnotation = unknown[];
 
 const richText = (value: unknown) => {
   if (!Array.isArray(value)) return '';
   return value.map(item => String((item as NotionRichText).plain_text || '')).join('');
 };
 
+const legacyTextParts = (value: unknown): NotionLiteText[] => {
+  if (!Array.isArray(value)) return [];
+  return value.map(item => {
+    if (!Array.isArray(item)) return { text: String(item || '') };
+    const annotations = Array.isArray(item[1]) ? item[1] as PublicNotionAnnotation[] : [];
+    return {
+      text: String(item[0] || ''),
+      bold: annotations.some(([kind]) => kind === 'b'),
+      italic: annotations.some(([kind]) => kind === 'i'),
+      underline: annotations.some(([kind]) => kind === '_'),
+      code: annotations.some(([kind]) => kind === 'c'),
+    };
+  });
+};
+
+const plainFromParts = (parts: NotionLiteText[]) => parts.map(part => part.text).join('');
+
 const legacyRichText = (value: unknown) => {
-  if (!Array.isArray(value)) return '';
-  return value.map(item => Array.isArray(item) ? String(item[0] || '') : String(item || '')).join('');
+  const parts = legacyTextParts(value);
+  return Array.isArray(parts) ? plainFromParts(parts) : '';
 };
 
 const formatPageId = (raw: string) => {
@@ -170,18 +188,17 @@ const childrenFor = async (blockId: string, key: string, counter: { value: numbe
 
 const publicTextFromBlock = (block: PublicNotionBlock) => {
   const text = legacyRichText(block.properties?.title);
+  const start = Number(block.format?.list_start_index ?? 1);
 
   switch (block.type) {
     case 'header':
-      return text ? `# ${text}` : '';
     case 'sub_header':
-      return text ? `## ${text}` : '';
     case 'sub_sub_header':
-      return text ? `### ${text}` : '';
+      return text;
     case 'bulleted_list':
       return text ? `- ${text}` : '';
     case 'numbered_list':
-      return text ? `1. ${text}` : '';
+      return text ? `${Number.isFinite(start) ? start : 1}. ${text}` : '';
     case 'to_do':
       return text ? `- [${block.properties?.checked ? 'x' : ' '}] ${text}` : '';
     case 'quote':
@@ -196,6 +213,39 @@ const publicTextFromBlock = (block: PublicNotionBlock) => {
       return '';
     default:
       return text;
+  }
+};
+
+const publicBlockToLite = (block: PublicNotionBlock, children: NotionLiteBlock[]): NotionLiteBlock | null => {
+  const text = legacyTextParts(block.properties?.title);
+  const hasText = text.some(part => part.text);
+  const accent = String(block.format?.block_color || '').includes('background');
+
+  switch (block.type) {
+    case 'header':
+    case 'sub_header':
+    case 'sub_sub_header':
+      return hasText ? { type: 'heading', text, accent, children } : null;
+    case 'bulleted_list':
+      return hasText ? { type: 'bulleted_list', text, children } : null;
+    case 'numbered_list': {
+      const start = Number(block.format?.list_start_index ?? 1);
+      return hasText ? { type: 'numbered_list', text, number: Number.isFinite(start) ? start : 1, children } : null;
+    }
+    case 'callout':
+      return { type: 'callout', icon: String(block.format?.page_icon || '💡'), text: hasText ? text : undefined, children };
+    case 'quote':
+      return hasText ? { type: 'quote', text, children } : null;
+    case 'code':
+      return hasText ? { type: 'code', text } : null;
+    case 'divider':
+      return { type: 'divider' };
+    case 'image':
+    case 'table_of_contents':
+    case 'page':
+      return null;
+    default:
+      return hasText ? { type: 'paragraph', text, children } : null;
   }
 };
 
@@ -229,6 +279,25 @@ const publicLinesFor = (
   return lines;
 };
 
+const publicBlocksFor = (
+  blockId: string,
+  blocks: Record<string, PublicNotionRecord>,
+  counter: { value: number },
+  depth = 0
+): NotionLiteBlock[] => {
+  if (counter.value >= MAX_BLOCKS || depth > 4) return [];
+
+  const block = publicBlockRecordValue(blocks[blockId]);
+  if (!block) return [];
+
+  if (block.type !== 'page') counter.value += 1;
+  const children = (block.content || []).flatMap(childId => publicBlocksFor(childId, blocks, counter, block.type === 'page' ? depth : depth + 1));
+  if (block.type === 'page') return children;
+
+  const ownBlock = publicBlockToLite(block, children);
+  return ownBlock ? [ownBlock] : children;
+};
+
 const publicNotionPage = async (pageId: string) => {
   const res = await fetch('https://www.notion.so/api/v3/loadPageChunk', {
     method: 'POST',
@@ -254,6 +323,7 @@ const publicNotionPage = async (pageId: string) => {
   }
 
   const content = publicLinesFor(pageId, blocks, { value: 0 }).join('\n\n').trim();
+  const bodyBlocks = publicBlocksFor(pageId, blocks, { value: 0 });
   if (!content) {
     throw new Error('공개 Notion 페이지에서 가져올 본문을 찾지 못했습니다.');
   }
@@ -261,6 +331,7 @@ const publicNotionPage = async (pageId: string) => {
   return {
     title: publicPageTitle(page),
     content,
+    bodyBlocks,
   };
 };
 
@@ -286,6 +357,7 @@ export async function POST(request: NextRequest) {
         pageId,
         url: normalizedUrl,
         source: 'public',
+        bodyBlocks: page.bodyBlocks,
       });
     } catch {
       return notionConfigError(['NOTION_API_KEY']);
@@ -319,6 +391,7 @@ export async function POST(request: NextRequest) {
         pageId,
         url: normalizedUrl,
         source: 'public',
+        bodyBlocks: page.bodyBlocks,
       });
     } catch {
       // Keep the official API error because it is usually more actionable.

@@ -2,8 +2,9 @@
 
 import { useEffect, useState, use } from 'react';
 import { useRouter } from 'next/navigation';
+import DiscussionBody from '@/components/DiscussionBody';
 import { supabase, Member, Meeting, DiscussionItem, MeetingRecord, BookReview, ReviewLike, ReviewComment } from '@/lib/supabase';
-import { encodeDiscussionContent, isNotionUrl, makeShareUrl, normalizeExternalUrl, parseDiscussionContent, shareOrCopy } from '@/lib/share';
+import { encodeDiscussionContent, isNotionUrl, makeShareUrl, normalizeExternalUrl, type NotionLiteBlock, parseDiscussionContent, shareOrCopy } from '@/lib/share';
 
 /* SVG 아이콘 */
 const Icons = {
@@ -31,6 +32,7 @@ interface DiscussionForm {
   type: 'topic' | 'question';
   content: string;
   externalUrl: string;
+  bodyBlocks?: NotionLiteBlock[];
 }
 
 export default function MeetingDetailPage({ params }: { params: Promise<{ id: string }> }) {
@@ -92,7 +94,7 @@ export default function MeetingDetailPage({ params }: { params: Promise<{ id: st
       if (data.error) {
         alert(data.error);
       } else if (data.discussions) {
-        setDiscForm({ ...discForm, content: data.discussions });
+        setDiscForm({ ...discForm, content: data.discussions, bodyBlocks: undefined });
       }
     } catch { alert('AI 발제문 생성에 실패했습니다.'); }
     setAiDiscLoading(false);
@@ -290,7 +292,7 @@ export default function MeetingDetailPage({ params }: { params: Promise<{ id: st
       alert('외부 링크는 http:// 또는 https://로 열 수 있는 주소여야 합니다.');
       return;
     }
-    const storedContent = encodeDiscussionContent(discForm.content.trim(), normalizedUrl || '');
+    const storedContent = encodeDiscussionContent(discForm.content.trim(), normalizedUrl || '', discForm.bodyBlocks);
     if (form.editDiscId) {
       // 수정 모드
       if (useLocal) {
@@ -395,7 +397,7 @@ export default function MeetingDetailPage({ params }: { params: Promise<{ id: st
 
   const updateDiscussionExternalUrl = async (discussion: DiscussionItem, externalUrl: string) => {
     const parsed = parseDiscussionContent(discussion.content);
-    const nextContent = encodeDiscussionContent(parsed.body, externalUrl);
+    const nextContent = encodeDiscussionContent(parsed.body, externalUrl, parsed.bodyBlocks);
     if (useLocal) {
       const updated = discussions.map(d => d.id === discussion.id ? { ...d, content: nextContent } : d);
       setDiscussions(updated);
@@ -406,8 +408,8 @@ export default function MeetingDetailPage({ params }: { params: Promise<{ id: st
     }
   };
 
-  const updateDiscussionBodyFromNotion = async (discussion: DiscussionItem, body: string, externalUrl: string) => {
-    const nextContent = encodeDiscussionContent(body, externalUrl);
+  const updateDiscussionBodyFromNotion = async (discussion: DiscussionItem, body: string, externalUrl: string, bodyBlocks?: NotionLiteBlock[]) => {
+    const nextContent = encodeDiscussionContent(body, externalUrl, bodyBlocks);
     if (useLocal) {
       const updated = discussions.map(d => d.id === discussion.id ? { ...d, content: nextContent } : d);
       setDiscussions(updated);
@@ -450,10 +452,11 @@ export default function MeetingDetailPage({ params }: { params: Promise<{ id: st
       }
 
       const nextBody = String(data.content).trim();
+      const nextBlocks = Array.isArray(data.bodyBlocks) ? data.bodyBlocks as NotionLiteBlock[] : undefined;
       if (discussion) {
-        await updateDiscussionBodyFromNotion(discussion, nextBody, normalizedUrl);
+        await updateDiscussionBodyFromNotion(discussion, nextBody, normalizedUrl, nextBlocks);
       } else {
-        setDiscForm(prev => ({ ...prev, content: nextBody, externalUrl: normalizedUrl }));
+        setDiscForm(prev => ({ ...prev, content: nextBody, externalUrl: normalizedUrl, bodyBlocks: nextBlocks }));
       }
       alert('노션 페이지 내용을 발제문에 적용했습니다.');
     } catch {
@@ -1039,7 +1042,7 @@ export default function MeetingDetailPage({ params }: { params: Promise<{ id: st
                   className="rec-textarea"
                   placeholder="발제문을 작성해주세요..."
                   value={discForm.content}
-                  onChange={e => setDiscForm({...discForm, content: e.target.value})}
+                  onChange={e => setDiscForm({...discForm, content: e.target.value, bodyBlocks: undefined})}
                   style={{fontSize:'16px',lineHeight:'2'}}
                   autoFocus
                 />
@@ -1094,7 +1097,7 @@ export default function MeetingDetailPage({ params }: { params: Promise<{ id: st
                         <span className="read-card-author">{getName(d.author_id)}</span>
                         <span className="read-card-date">{new Date(d.created_at || '').toLocaleString('ko',{month:'short',day:'numeric',hour:'2-digit',minute:'2-digit'})}</span>
                       </div>
-                      <div className="read-card-content">{parsed.body}</div>
+                      <DiscussionBody body={parsed.body} blocks={parsed.bodyBlocks} />
                       {parsed.externalUrl && (
                         <a className="external-link-chip" href={parsed.externalUrl} target="_blank" rel="noopener noreferrer">
                           노션/외부 링크 열기
@@ -1108,7 +1111,7 @@ export default function MeetingDetailPage({ params }: { params: Promise<{ id: st
                           </button>
                         )}
                         <button className="read-action-btn" onClick={() => exportDiscussionToNotion(d)}>노션연동</button>
-                        <button className="read-action-btn" onClick={() => { setForm({editDiscId:d.id}); setDiscForm({type:d.type,content:parsed.body,externalUrl:parsed.externalUrl}); }}>수정하기</button>
+                        <button className="read-action-btn" onClick={() => { setForm({editDiscId:d.id}); setDiscForm({type:d.type,content:parsed.body,externalUrl:parsed.externalUrl,bodyBlocks:parsed.bodyBlocks}); }}>수정하기</button>
                         <button className="read-action-btn delete" onClick={() => deleteDiscussion(d.id)}>삭제하기</button>
                       </div>
                     </div>
@@ -1359,7 +1362,7 @@ export default function MeetingDetailPage({ params }: { params: Promise<{ id: st
               <option value="topic">발제문</option><option value="question">질문</option>
             </select>
           </div>
-          <div className="form-group"><label className="form-label">내용</label><textarea className="input" placeholder="내용을 입력해주세요" value={discForm.content} onChange={e => setDiscForm({...discForm, content: e.target.value})} /></div>
+          <div className="form-group"><label className="form-label">내용</label><textarea className="input" placeholder="내용을 입력해주세요" value={discForm.content} onChange={e => setDiscForm({...discForm, content: e.target.value, bodyBlocks: undefined})} /></div>
           <div className="form-group"><label className="form-label">노션/외부 링크</label><input className="input" placeholder="https://notion.so/..." value={discForm.externalUrl} onChange={e => setDiscForm({...discForm, externalUrl: e.target.value})} /></div>
           <div className="modal-btns"><button className="btn btn-outline" style={{flex:1}} onClick={() => setModal(null)}>취소</button><button className="btn btn-accent" style={{flex:1}} onClick={addDiscussion}>{form.editDiscId ? '수정' : '추가'}</button></div>
         </div></div>

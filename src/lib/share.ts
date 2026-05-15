@@ -1,8 +1,26 @@
 export type ShareKind = 'poll' | 'book-poll' | 'meeting' | 'discussion' | 'review';
 
+export interface NotionLiteText {
+  text: string;
+  bold?: boolean;
+  italic?: boolean;
+  underline?: boolean;
+  code?: boolean;
+}
+
+export interface NotionLiteBlock {
+  type: 'paragraph' | 'heading' | 'numbered_list' | 'bulleted_list' | 'callout' | 'quote' | 'code' | 'divider';
+  text?: NotionLiteText[];
+  number?: number;
+  icon?: string;
+  accent?: boolean;
+  children?: NotionLiteBlock[];
+}
+
 export interface ParsedDiscussionContent {
   body: string;
   externalUrl: string;
+  bodyBlocks?: NotionLiteBlock[];
 }
 
 export const parseDiscussionContent = (content: string): ParsedDiscussionContent => {
@@ -12,6 +30,7 @@ export const parseDiscussionContent = (content: string): ParsedDiscussionContent
       return {
         body: String(parsed.body || ''),
         externalUrl: String(parsed.externalUrl || ''),
+        bodyBlocks: Array.isArray(parsed.bodyBlocks) ? parsed.bodyBlocks : undefined,
       };
     }
   } catch {
@@ -20,9 +39,9 @@ export const parseDiscussionContent = (content: string): ParsedDiscussionContent
   return { body: content, externalUrl: '' };
 };
 
-export const encodeDiscussionContent = (body: string, externalUrl: string) => {
-  if (!externalUrl) return body;
-  return JSON.stringify({ kind: 'discussion-v1', body, externalUrl });
+export const encodeDiscussionContent = (body: string, externalUrl: string, bodyBlocks?: NotionLiteBlock[]) => {
+  if (!externalUrl && !bodyBlocks?.length) return body;
+  return JSON.stringify({ kind: 'discussion-v1', body, externalUrl, bodyBlocks });
 };
 
 export const normalizeExternalUrl = (value: string) => {

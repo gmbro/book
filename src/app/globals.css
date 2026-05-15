@@ -1542,6 +1542,78 @@ textarea.input { min-height: 90px; resize: vertical; }
   word-break: break-word;
 }
 
+.notion-lite-content {
+  margin-top: 8px;
+  font-size: 13px;
+  line-height: 1.8;
+  color: var(--text);
+  word-break: break-word;
+}
+.share-card .notion-lite-content,
+.share-card .read-card-content {
+  margin-top: 14px;
+  font-size: 15px;
+}
+.notion-lite-content p {
+  margin: 8px 0;
+}
+.notion-lite-heading {
+  margin: 22px 0 10px;
+  font-size: 17px;
+  line-height: 1.35;
+  font-weight: 700;
+}
+.notion-lite-heading.accent {
+  padding: 3px 8px;
+  border-radius: 4px;
+  background: #fbf3d0;
+}
+.notion-lite-callout {
+  display: flex;
+  gap: 8px;
+  margin: 10px 0;
+  padding: 10px 12px;
+  border-radius: 4px;
+  background: #f7f6f3;
+}
+.notion-lite-callout-icon {
+  flex: 0 0 auto;
+}
+.notion-lite-callout-body {
+  flex: 1;
+  min-width: 0;
+}
+.notion-lite-list {
+  margin: 10px 0 10px 22px;
+  padding-left: 16px;
+}
+.notion-lite-list .notion-lite-list {
+  margin-top: 8px;
+  margin-bottom: 6px;
+}
+.notion-lite-list li {
+  padding-left: 4px;
+}
+.notion-lite-content code {
+  padding: 1px 4px;
+  border-radius: 4px;
+  background: rgba(235, 87, 87, 0.12);
+  color: #c93f3a;
+  font-family: inherit;
+  font-size: 0.95em;
+}
+.notion-lite-content hr {
+  margin: 16px 0;
+  border: 0;
+  border-top: 1px solid var(--border);
+}
+.notion-lite-content blockquote {
+  margin: 10px 0;
+  padding-left: 12px;
+  border-left: 3px solid var(--border);
+  color: var(--text-sub);
+}
+
 .external-link-chip {
   display: inline-flex;
   align-items: center;

@@ -2,6 +2,7 @@
 
 import { use, useEffect, useState } from 'react';
 import Link from 'next/link';
+import DiscussionBody from '@/components/DiscussionBody';
 import { supabase, BookPoll, BookPollCandidate, BookPollVote, BookReview, DiscussionItem, Meeting, Member, Poll, PollComment, PollVote } from '@/lib/supabase';
 import { parseDiscussionContent, ShareKind } from '@/lib/share';
 
@@ -182,7 +183,7 @@ function DiscussionShare({ data }: { data: Extract<ShareData, { kind: 'discussio
       <h1>{data.meeting?.book_title ? `『${data.meeting.book_title}』 발제문` : '발제문'}</h1>
       {data.meeting && <p className="share-meta">{formatDate(data.meeting.date)} {data.meeting.time || ''}</p>}
       <p className="share-meta">작성 {getName(data.members, data.discussion.author_id)}</p>
-      <p className="share-body">{parsed.body}</p>
+      <DiscussionBody body={parsed.body} blocks={parsed.bodyBlocks} />
       {parsed.externalUrl && <a className="share-primary-link" href={parsed.externalUrl} target="_blank" rel="noopener noreferrer">노션/외부 링크 열기</a>}
     </article>
   );
